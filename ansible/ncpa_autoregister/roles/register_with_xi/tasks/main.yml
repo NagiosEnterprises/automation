@@ -1,0 +1,40 @@
+---
+- name: Register Host With XI
+  uri:
+    url: http://{{ xi_ip }}/nagiosxi/api/v1/config/host?apikey={{ xi_api_key }}
+    body: 'host_name={{ ansible_default_ipv4.address }}&address={{ ansible_default_ipv4.address }}&check_command=check_ping\!3000,80%\!5000,100%&max_check_attempts=2&check_period=24x7&contacts=nagiosadmin&notification_interval=5&notification_period=24x7'
+    method: POST
+    validate_certs: no
+    timeout: 120
+
+- name: Register CPU Service with XI
+  uri:
+    url: http://{{ xi_ip }}/nagiosxi/api/v1/config/service?apikey={{ xi_api_key }}
+    body: "host_name={{ ansible_default_ipv4.address }}&service_description=CPU&check_command=check_xi_ncpa\\!-t '{{ ncpa_token }}' -P 5693 -M cpu/percent -w 20 -c 40 -q 'aggregate=avg'&check_interval=5&retry_interval=1&max_check_attempts=2&check_period=24x7&contacts=nagiosadmin&notification_interval=5&notification_period=24x7"
+    method: POST
+    validate_certs: no
+    timeout: 120
+
+- name: Register RAM Service with XI
+  uri:
+    url: http://{{ xi_ip }}/nagiosxi/api/v1/config/service?apikey={{ xi_api_key }}
+    body: "host_name={{ ansible_default_ipv4.address }}&service_description=RAM&check_command=check_xi_ncpa\\!-t '{{ ncpa_token }}' -P 5693 -M memory/virtual -u -w 50 -c 80&check_interval=5&retry_interval=1&max_check_attempts=2&check_period=24x7&contacts=nagiosadmin&notification_interval=5&notification_period=24x7"
+    method: POST
+    validate_certs: no
+    timeout: 120
+
+- name: Register Swap Service with XI
+  uri:
+    url: http://{{ xi_ip }}/nagiosxi/api/v1/config/service?apikey={{ xi_api_key }}
+    body: "host_name={{ ansible_default_ipv4.address }}&service_description=Swap&check_command=check_xi_ncpa\\!-t '{{ ncpa_token }}' -P 5693 -M memory/swap -u -w 50 -c 80&check_interval=5&retry_interval=1&max_check_attempts=2&check_period=24x7&contacts=nagiosadmin&notification_interval=5&notification_period=24x7"
+    method: POST
+    validate_certs: no
+    timeout: 120
+
+- name: Register Disk Service with XI
+  uri:
+    url: http://{{ xi_ip }}/nagiosxi/api/v1/config/service?apikey={{ xi_api_key }}
+    body: "host_name={{ ansible_default_ipv4.address }}&service_description=Disk&check_command=check_xi_ncpa\\!-t '{{ ncpa_token }}' -P 5693 -M 'disk/logical/|/used_percent' -w 70 -c 90&check_interval=5&retry_interval=1&max_check_attempts=2&check_period=24x7&contacts=nagiosadmin&notification_interval=5&notification_period=24x7"
+    method: POST
+    validate_certs: no
+    timeout: 120
