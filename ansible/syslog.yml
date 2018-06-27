@@ -1,0 +1,40 @@
+---
+- name: Forward syslog to Nagios Log Server
+  remote_user: root
+  hosts: all
+  connection: ssh
+  tasks:
+  - name: take care of Ubuntu 16.04 rsyslog.conf bug
+    shell: sed -e '/$KLogPermitNonKernelFacility on/s/^/#/' -i /etc/rsyslog.conf
+    when: ansible_distribution == "Ubuntu" and ansible_distribution_major_version|int == 16
+
+  - name: get the script NOTE !!change the IP address!! to your NLS IP or FQDN
+    get_url:
+      url: http://192.168.3.33/nagioslogserver/scripts/setup-linux.sh
+      dest: /tmp/setup-linux.sh
+      mode: u+x
+
+  - name: RedHat install policycoreutils for SELinux using non-standard syslog port
+    yum:
+      name: policycoreutils
+      state: present
+    when: ansible_os_family == "RedHat"
+
+  - name: RedHat install setroubleshoot SELinux using non-standard syslog port
+    yum:
+      name: setroubleshoot
+      state: present
+    when: ansible_os_family == "RedHat"
+    
+  - name: selinux allow rsyslog export through non-standard port
+    shell: semanage port -a -t syslogd_port_t -p tcp 5544    
+    when: ansible_os_family == "RedHat"
+
+  - name: run the script
+    shell: ./setup-linux.sh -s 192.168.3.33 -p 5544
+    args:
+      chdir: /tmp
+
+
+        
+        
