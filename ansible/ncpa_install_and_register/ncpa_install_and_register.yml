@@ -3,11 +3,6 @@
   hosts: all
   remote_user: root
 
-  vars_files:
-    - 'secrets.yml'
-  vars:
-    xi_ip: '192.168.100.100'
-
   roles:
     - role: ncpa_install_linux
     - role: register_with_xi
