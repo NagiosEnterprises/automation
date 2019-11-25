@@ -1,0 +1,9 @@
+---
+- name: Install NCPA and Register Host and Services
+  hosts: all
+  remote_user: root
+
+  roles:
+    - role: ncpa_install_linux
+    - role: register_with_xi
+    - role: xi_apply_config

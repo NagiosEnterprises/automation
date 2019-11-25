@@ -1,0 +1,127 @@
+---
+# Download NCPA
+
+- name: Download NCPA (Debian 32)
+  get_url: url=https://assets.nagios.com/downloads/ncpa/ncpa-latest.d{{ ansible_distribution_major_version }}.i386.deb dest=/tmp/ncpa.deb
+  when: ansible_distribution == "Debian" and ansible_architecture == "i386"
+- name: Download NCPA (Debian 64)
+  get_url: url=https://assets.nagios.com/downloads/ncpa/ncpa-latest.d{{ ansible_distribution_major_version }}.amd64.deb dest=/tmp/ncpa.deb
+  when: ansible_distribution == "Debian" and ansible_architecture == "x86_64"
+
+- name: Download NCPA (Ubuntu 32)
+  get_url: url=https://assets.nagios.com/downloads/ncpa/ncpa-latest.i386.deb dest=/tmp/ncpa.deb
+  when: ansible_distribution == "Ubuntu" and ansible_architecture == "i386"
+- name: Download NCPA (Ubuntu 64)
+  get_url: url=https://assets.nagios.com/downloads/ncpa/ncpa-latest.amd64.deb dest=/tmp/ncpa.deb
+  when: ansible_distribution == "Ubuntu" and ansible_architecture == "x86_64"
+
+- name: Download NCPA (RedHat & CentOS 32)
+  get_url: url=https://assets.nagios.com/downloads/ncpa/ncpa-latest.el{{ ansible_distribution_major_version }}.i386.rpm dest=/tmp/ncpa.rpm
+  when: ansible_os_family == "RedHat" and ansible_architecture == "i386"    
+- name: Download NCPA (RedHat & CentOS 64)
+  get_url: url=https://assets.nagios.com/downloads/ncpa/ncpa-latest.el{{ ansible_distribution_major_version }}.x86_64.rpm dest=/tmp/ncpa.rpm
+  when: ansible_os_family == "RedHat" and ansible_architecture == "x86_64"
+
+- name: Download NCPA (SUSE 11 32)
+  get_url: url=https://assets.nagios.com/downloads/ncpa/ncpa-latest.os{{ ansible_distribution_major_version }}.i386.rpm dest=/tmp/ncpa.rpm
+  when: ansible_os_family == "Suse" and ansible_architecture == "i386" and ansible_distribution_major_version|int == 11
+- name: Download NCPA (SUSE 11 64)
+  get_url: url=https://assets.nagios.com/downloads/ncpa/ncpa-latest.os{{ ansible_distribution_major_version }}.x86_64.rpm dest=/tmp/ncpa.rpm
+  when: ansible_os_family == "Suse" and ansible_architecture == "x86_64" and ansible_distribution_major_version|int == 11
+- name: Download NCPA (SUSE >=12)
+  get_url: url=https://assets.nagios.com/downloads/ncpa/ncpa-latest.os.x86_64.rpm dest=/tmp/ncpa.rpm
+  when: ansible_os_family == "Suse" and ansible_architecture == "x86_64" and ansible_distribution_major_version|int >= 12
+
+
+
+# Install NCPA
+
+- name: Install NCPA (Debian & Ubuntu)
+  apt:
+    deb: /tmp/ncpa.deb
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Install NCPA (RedHat & CentOS)
+  yum:
+    name: /tmp/ncpa.rpm
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Install NCPA (SUSE & OpenSUSE)
+  zypper:
+    name: /tmp/ncpa.rpm
+    disable_gpg_check: yes
+    state: present
+  when: ansible_os_family == "Suse"
+
+
+
+# Set NCPA Token
+
+- name: Set NCPA Token
+  lineinfile:
+    dest: /usr/local/ncpa/etc/ncpa.cfg
+    regexp: ^community_string
+    line: "community_string = {{ ncpa_token }}"      
+
+
+
+# Restart NCPA
+
+- name: Restart NCPA
+  service:
+    name: ncpa_listener
+    state: restarted
+    enabled: yes
+
+
+
+# Configure Firewall
+
+# Debian by default has no firewall, so this script doesn't need to open anything. If you run Debian and have a firewall scheme, you must modify this script to fit your scheme. If you use UFW, the Ubuntu section should be helpful.
+# SUSE (once you enable eth0 to take connections) defaults to no restrictions on internal network traffic. If you are accessing SUSE machines from outside the internal network, or if you have internal network firewall settings, you must specifically allow traffic on 5693 for your environment.
+    
+- name: Open NCPA Port (Ubuntu)
+  ufw:
+    state: enabled
+    policy: allow
+    proto: any
+    rule: allow
+    to_port: 5693
+  when: ansible_distribution == "Ubuntu"
+
+- name: Open NCPA Port (CentOS & RHEL 6)
+  iptables:
+    chain: INPUT
+    jump: ACCEPT
+    destination_port: 5693
+    state: present
+    protocol: tcp
+  when: ansible_distribution == "RedHat" and ansible_distribution_major_version|int == 6
+
+- name: Open NCPA Port (CentOS 7)
+  iptables:
+    chain: INPUT
+    jump: ACCEPT
+    destination_port: 5693
+    state: present
+    protocol: tcp
+  when: ansible_distribution == "CentOS" and ansible_distribution_major_version|int == 7
+
+- name: Open NCPA Port (RedHat 7)
+  firewalld:
+    immediate: yes
+    permanent: yes
+    port: 5693
+    state: enabled
+  when: ansible_distribution == "RedHat" and ansible_distribution_major_version|int == 7
+
+- name: Save iptables Config (CentOS & RHEL 6)
+  shell: service iptables save
+  when: ansible_distribution == "RedHat" and ansible_distribution_major_version|int == 6
+
+- name: Save iptables Config (CentOS 7)
+  shell: iptables-save
+  when: ansible_distribution == "CentOS" and ansible_distribution_major_version|int == 7
+
