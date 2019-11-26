@@ -1,0 +1,10 @@
+---
+- hosts: all
+  become: yes
+  become_method: runas
+  become_user: SYSTEM
+
+  roles:
+    - ncpa_install_windows
+    - register_with_xi
+	- xi_apply_configs
