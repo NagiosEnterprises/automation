@@ -1,0 +1,7 @@
+---
+- name: Windows install NCPA
+  win_package:
+    path: https://assets.nagios.com/downloads/ncpa/dev/ncpa-2.1.10.beta.exe
+    product_id: 'NCPA'
+    state: present
+    arguments: "/S /TOKEN='{{ ncpa_token }}'"
