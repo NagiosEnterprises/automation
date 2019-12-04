@@ -8,7 +8,7 @@
     - ncpa_install_windows
 
 - hosts: all
-  remote_user: root
+
   roles:
     - register_with_xi
     - xi_apply_config
