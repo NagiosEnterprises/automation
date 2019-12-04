@@ -1,0 +1,9 @@
+---
+- name: Register Swap Service with XI
+  uri:
+    url: http://{{ xi_ip }}/nagiosxi/api/v1/config/service?apikey={{ xi_api_key }}
+    body: "host_name={{ inventory_hostname }}&service_description=Swap&check_command=check_xi_ncpa\\!-t '{{ ncpa_token }}' -P 5693 -M memory/swap -u -w 50 -c 80&check_interval=5&retry_interval=1&max_check_attempts=2&check_period=24x7&contacts=nagiosadmin&notification_interval=5&notification_period=24x7"
+    method: POST
+    validate_certs: no
+    timeout: 120
+  delegate_to: 127.0.0.1

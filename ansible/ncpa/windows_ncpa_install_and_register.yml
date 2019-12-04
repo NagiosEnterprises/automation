@@ -1,5 +1,6 @@
 ---
-- hosts: all
+- name: Install NCPA on Windows
+  hosts: all
   become: yes
   become_method: runas
   become_user: SYSTEM
@@ -7,8 +8,12 @@
   roles:
     - ncpa_install_windows
 
-- hosts: all
+- name: Register Windows host and services
+  hosts: all
 
   roles:
-    - register_with_xi
+    - register_host_with_xi
+    - register_cpu_service_with_xi
+    - register_ram_service_with_xi
+    - register_windows_disk_with_xi
     - xi_apply_config
