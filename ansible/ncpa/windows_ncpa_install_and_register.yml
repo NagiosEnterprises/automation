@@ -9,7 +9,7 @@
     - ncpa_install_windows
 
 - name: Register Windows host and services
-  hosts: all
+  hosts: windows
 
   roles:
     - register_host_with_xi
