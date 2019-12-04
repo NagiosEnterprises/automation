@@ -9,5 +9,5 @@
     - register_cpu_service_with_xi
     - register_ram_service_with_xi
     - register_swap_service_with_xi
-    - register_linux_disk_with_xi
+    - register_linux_disk_service_with_xi
     - xi_apply_config
