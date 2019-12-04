@@ -15,5 +15,5 @@
     - register_host_with_xi
     - register_cpu_service_with_xi
     - register_ram_service_with_xi
-    - register_windows_disk_with_xi
+    - register_windows_disk_service_with_xi
     - xi_apply_config
