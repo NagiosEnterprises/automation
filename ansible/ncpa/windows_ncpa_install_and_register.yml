@@ -1,6 +1,6 @@
 ---
 - name: Install NCPA on Windows
-  hosts: all
+  hosts: windows
   become: yes
   become_method: runas
   become_user: SYSTEM

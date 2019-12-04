@@ -1,6 +1,6 @@
 ---
 - name: Install NCPA on Linux and register host and services
-  hosts: all
+  hosts: linux
   remote_user: root
 
   roles:
