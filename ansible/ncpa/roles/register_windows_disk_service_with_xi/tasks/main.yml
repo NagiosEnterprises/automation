@@ -7,7 +7,7 @@
     body:
       - [ host_name, "{{ inventory_hostname }}" ]
       - [ service_description, Disk ]
-      - [ check_command, "check_xi_ncpa\\!-t '{{ ncpa_token }}' -P 5693 -M 'disk/logical/C::|/used_percent' -w 70 -c 90" ]
+      - [ check_command, "check_xi_ncpa\\!-t '{{ ncpa_token }}' -P 5693 -M 'disk/logical/C:|/used_percent' -w 70 -c 90" ]
       - [ check_interval, 5 ]
       - [ retry_interval, 1 ]
       - [ max_check_attempts, 2 ]
