@@ -2,17 +2,17 @@
 - name: Register Host With XI
   uri:
     url: http://{{ xi_ip }}/nagiosxi/api/v1/config/host?apikey={{ xi_api_key }}
+    method: POST
     body_format: form-urlencoded
     body:
       - [ host_name, "{{ inventory_hostname }}" ]
       - [ address, "{{ inventory_hostname }}" ]
-      - [ check_command, check_ping\!3000,80%\!5000,100% ]
+      - [ check_command, "check_ping\!3000,80%\!5000,100%" ]
       - [ max_check_attempts, 2 ]
       - [ check_period, 24x7 ]
       - [ contacts, nagiosadmin ]
       - [ notification_interval, 5 ]
-      - [ notification_period, 24x7 ]    
-    method: POST
+      - [ notification_period, 24x7 ]
     validate_certs: no
     timeout: 120
   delegate_to: 127.0.0.1
