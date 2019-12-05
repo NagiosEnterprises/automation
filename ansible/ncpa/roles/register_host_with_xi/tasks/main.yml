@@ -7,7 +7,7 @@
     body:
       - [ host_name, "{{ inventory_hostname }}" ]
       - [ address, "{{ inventory_hostname }}" ]
-      - [ check_command, "check_ping\!3000,80%\!5000,100%" ]
+      - [ check_command, "check_ping\\!3000,80%\\!5000,100%" ]
       - [ max_check_attempts, 2 ]
       - [ check_period, 24x7 ]
       - [ contacts, nagiosadmin ]
