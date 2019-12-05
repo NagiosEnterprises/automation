@@ -11,7 +11,6 @@
       - [ max_check_attempts, 2 ]
       - [ check_period, 24x7 ]
       - [ contacts, nagiosadmin ]
-      - [ contact_groups, admins ]
       - [ notification_interval, 5 ]
       - [ notification_period, 24x7 ]
     validate_certs: no
