@@ -17,7 +17,7 @@
 
 - name: Download NCPA (RedHat & CentOS 32)
   get_url: url=https://assets.nagios.com/downloads/ncpa/ncpa-latest.el{{ ansible_distribution_major_version }}.i386.rpm dest=/tmp/ncpa.rpm
-  when: ansible_os_family == "RedHat" and ansible_architecture == "i386"    
+  when: ansible_os_family == "RedHat" and ansible_architecture == "i386"
 - name: Download NCPA (RedHat & CentOS 64)
   get_url: url=https://assets.nagios.com/downloads/ncpa/ncpa-latest.el{{ ansible_distribution_major_version }}.x86_64.rpm dest=/tmp/ncpa.rpm
   when: ansible_os_family == "RedHat" and ansible_architecture == "x86_64"
@@ -63,7 +63,7 @@
   lineinfile:
     dest: /usr/local/ncpa/etc/ncpa.cfg
     regexp: ^community_string
-    line: "community_string = {{ ncpa_token }}"      
+    line: "community_string = {{ ncpa_token }}"
 
 
 
@@ -81,7 +81,7 @@
 
 # Debian by default has no firewall, so this script doesn't need to open anything. If you run Debian and have a firewall scheme, you must modify this script to fit your scheme. If you use UFW, the Ubuntu section should be helpful.
 # SUSE (once you enable eth0 to take connections) defaults to no restrictions on internal network traffic. If you are accessing SUSE machines from outside the internal network, or if you have internal network firewall settings, you must specifically allow traffic on 5693 for your environment.
-    
+
 - name: Open NCPA Port (Ubuntu)
   ufw:
     state: enabled
@@ -118,10 +118,10 @@
   when: ansible_distribution == "RedHat" and ansible_distribution_major_version|int == 7
 
 - name: Save iptables Config (CentOS & RHEL 6)
-  shell: service iptables save
+  command: service iptables save
   when: ansible_distribution == "RedHat" and ansible_distribution_major_version|int == 6
 
 - name: Save iptables Config (CentOS 7)
-  shell: iptables-save
+  command: iptables-save
   when: ansible_distribution == "CentOS" and ansible_distribution_major_version|int == 7
 
