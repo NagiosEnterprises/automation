@@ -45,13 +45,11 @@ ncpa_token: 'a_secure_token'
     xi_ip: '192.168.100.100'
 ```
 
-Set the XI API Key and the NCPA Token in the vault-encrypted secrets.yml file:
-Run
+Set the XI API Key and the NCPA Token in the vault-encrypted secrets.yml file by running:
 ```
 ansible-vault edit secrets.yml
 ```
-Enter password hunter2. * Feel free to change this as you see fit
-The file will look something like this, update to suit your environment:
+Enter password hunter2. Feel free to change this password. The file will look something like this, update to suit your environment:
 ```yml
 ---
 xi_api_key: 'XFbaUsuPi0OU3n0jmVkCAkYl78t2DodBkI0eav3sP8G8CHrXS5vooNNubAPOX3lh'
