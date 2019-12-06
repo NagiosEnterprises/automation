@@ -1,8 +1,8 @@
 ---
 - name: Apply Configuration
   uri:
-    url: http://{{ xi_ip }}/nagiosxi/api/v1/config/host?apikey={{ xi_api_key }}
-    body: "force=1&applyconfig=1"
+    url: http://{{ xi_ip }}/nagiosxi/api/v1/system/applyconfig?apikey={{ xi_api_key }}
+    body: "applyconfig=1"
     method: POST
     validate_certs: no
     timeout: 120
