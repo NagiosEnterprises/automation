@@ -46,16 +46,18 @@ ncpa_token: 'a_secure_token'
 ```
 
 Set the XI API Key and the NCPA Token in the vault-encrypted secrets.yml file:
-Run ansible-vault edit secrets.yml * It may ask you for the password three times, this is a known ansible bug
-Enter password hunter2 as this is the example used * Feel free to change this as you see fit
-File will look something like this, update to suit your environment:
+Run
+```
+ansible-vault edit secrets.yml
+```
+Enter password hunter2. * Feel free to change this as you see fit
+The file will look something like this, update to suit your environment:
 ```yml
 ---
 xi_api_key: 'XFbaUsuPi0OU3n0jmVkCAkYl78t2DodBkI0eav3sP8G8CHrXS5vooNNubAPOX3lh'
 ncpa_token: 'DabohKGprhau'
 ```
-
-When running the playbook, prompt Ansible to prompt the user for the vault password with the --ask-vault-pass flag as in this example:
+When running the playbook, have Ansible prompt for the vault password with the --ask-vault-pass flag as in this example:
 ```
 ansible-playbook linux_ncpa_install_and_register.yml --ask-vault-pass
 ```
