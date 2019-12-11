@@ -21,7 +21,7 @@
     win_lineinfile:
       path: 'C:\Program Files (x86)\nxlog\conf\nxlog.conf'
       state: present
-      regex: '^    Host 192\.168\.1\.100'
+      regex: '^\s*Host'
       line: '    Host {{ nls_ip }}'
 
   - name: restart nxlog
