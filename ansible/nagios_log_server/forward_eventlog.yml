@@ -22,6 +22,7 @@
       path: 'C:\Program Files (x86)\nxlog\conf\nxlog.conf'
       state: present
       regex: '^define*'
+      insertafter: '^    Module om_tcp'
       line: '    Host {{ nls_ip }}'
 
   - name: restart nxlog
