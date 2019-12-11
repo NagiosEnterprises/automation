@@ -1,0 +1,21 @@
+---
+- name: RedHat install policycoreutils for SELinux using non-standard syslog port
+  yum:
+    name: policycoreutils
+    state: present
+  when: ansible_selinux is defined and ansible_selinux != False and ansible_selinux.status == 'enabled' and ansible_os_family == "RedHat"
+
+- name: RedHat install setroubleshoot for SELinux using non-standard syslog port
+  yum:
+    name: setroubleshoot
+    state: present
+  when: ansible_selinux is defined and ansible_selinux != False and ansible_selinux.status == 'enabled' and ansible_os_family == "RedHat"
+  
+- name: Ubuntu install semanage-utils
+  apt:
+    name: semanage-utils
+    state: present
+  when: ansible_selinux is defined and ansible_selinux != False and ansible_selinux.status == 'enabled' and ansible_os == "Ubuntu"
+  
+- name: selinux allow rsyslog export through non-standard port
+  command: semanage port -a -t syslogd_port_t -p tcp 5544

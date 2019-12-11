@@ -1,0 +1,31 @@
+---
+- name: Install Nxlog
+  hosts: windows
+  become: yes
+  become_method: runas
+  become_user: SYSTEM
+
+  tasks:
+  - name: install package
+    win_package:
+      path: http://{{ nls_ip }}/nagioslogserver/scripts/nxlog-ce-latest.msi
+      product_id: '{FC526514-AFD9-4A5C-8677-56241539609D}'
+      state: present
+
+  - name: place nxlog.conf
+    win_copy:
+      src: files/nxlog.conf
+      dest: 'C:\Program Files (x86)\nxlog\conf\nxlog.conf'
+    when: installresult.changed == true
+
+  - name: edit nxlog.conf with server IP
+    win_lineinfile:
+      path: 'C:\Program Files (x86)\nxlog\conf\nxlog.conf'
+      regex: '^Host 192.168.1.100'
+      line: 'Host {{ nls_ip }}'
+    when: installresult.changed == true
+
+  - name: restart nxlog
+    win_service:
+      name: nxlog
+      state: restarted

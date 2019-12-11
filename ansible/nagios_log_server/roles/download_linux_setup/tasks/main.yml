@@ -1,0 +1,6 @@
+---
+- name: get the syslog modification script from the Log Server master instance
+  get_url:
+    url: http://{{ nls_ip }}/nagioslogserver/scripts/setup-linux.sh
+    dest: /tmp/setup-linux.sh
+    mode: u+x

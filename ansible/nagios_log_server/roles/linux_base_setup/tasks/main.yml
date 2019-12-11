@@ -1,0 +1,5 @@
+---
+- name: run the script
+  script: setup-linux.sh -s {{ nls_ip }} -p 5544
+  args:
+    chdir: /tmp
