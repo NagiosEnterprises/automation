@@ -1,5 +1,5 @@
 ---
 - name: run the script
-  script: setup-linux.sh -s {{ nls_ip }} -p 5544 -f "/var/log/httpd/access_log" -t apache_access
+  command: './setup-linux.sh -s {{ nls_ip }} -p 5544 -f "/var/log/httpd/access_log" -t apache_access'
   args:
     chdir: /tmp
