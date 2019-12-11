@@ -20,8 +20,8 @@
   - name: edit nxlog.conf with server IP
     win_lineinfile:
       path: 'C:\Program Files (x86)\nxlog\conf\nxlog.conf'
-      regex: '^Host 192\.168\.1\.100'
-      line: 'Host {{ nls_ip }}'
+      regex: '^    Host 192\.168\.1\.100'
+      line: '    Host {{ nls_ip }}'
 
   - name: restart nxlog
     win_service:
