@@ -21,7 +21,6 @@
     win_lineinfile:
       path: 'C:\Program Files (x86)\nxlog\conf\nxlog.conf'
       state: present
-      regex: '^asdfasdhf'
       insertafter: '^    Module om_tcp'
       line: '    Host {{ nls_ip }}'
 
