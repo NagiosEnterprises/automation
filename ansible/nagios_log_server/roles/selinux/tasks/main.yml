@@ -15,13 +15,13 @@
   apt:
     name: semanage-utils
     state: present
-  when: ansible_selinux is defined and ansible_selinux != False and ansible_selinux.status == 'enabled' and ansible_distribution == "Ubuntu"
+  when: ansible_selinux is defined and ansible_selinux != False and ansible_distribution == "Ubuntu"
   
 - name: Ubuntu install python-selinux
   apt:
     name: python-selinux
     state: present
-  when: ansible_selinux is defined and ansible_selinux != False and ansible_selinux.status == 'enabled' and ansible_distribution == "Ubuntu"
+  when: ansible_selinux is defined and ansible_selinux != False and ansible_distribution == "Ubuntu"
   
 - name: selinux allow rsyslog export through non-standard port
   command: semanage port -a -t syslogd_port_t -p tcp 5544
