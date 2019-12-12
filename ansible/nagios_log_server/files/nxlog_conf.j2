@@ -49,9 +49,9 @@ LogFile %ROOT%\data\nxlog.log
 
 <Output out>
     Module om_tcp
-	Host {{ nls_ip }}
+    Host {{ nls_ip }}
     Port 3515
-	
+
     Exec  $tmpmessage = $Message; delete($Message); rename_field("tmpmessage","message");
     Exec  $raw_event = to_json();
 	
