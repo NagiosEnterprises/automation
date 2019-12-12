@@ -13,17 +13,11 @@
       state: present
 
   - name: place nxlog.conf
-    win_copy:
-      src: files/nxlog.conf
+    template:
+      src: files/nxlog_conf.j2
       dest: 'C:\Program Files (x86)\nxlog\conf\nxlog.conf'
-
-  - name: edit nxlog.conf with server IP
-    win_lineinfile:
-      path: 'C:\Program Files (x86)\nxlog\conf\nxlog.conf'
-      insertafter: '^    Module om_tcp'
-      line: '    Host {{ nls_ip }}'
 
   - name: restart nxlog
     win_service:
       name: nxlog
-      state: started
+      state: restarted
