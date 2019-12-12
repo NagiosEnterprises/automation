@@ -25,4 +25,4 @@
   
 - name: selinux allow rsyslog export through non-standard port
   command: semanage port -a -t syslogd_port_t -p tcp 5544
-  when: ansible_selinux is defined and ansible_selinux != False and ansible_selinux.status == 'enabled'
+  when: ansible_selinux is defined and ansible_selinux != False
