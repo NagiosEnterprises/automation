@@ -1,0 +1,6 @@
+---
+- name: install package
+  win_package:
+    path: http://{{ nls_ip }}/nagioslogserver/scripts/nxlog-ce-latest.msi
+    product_id: '{FC526514-AFD9-4A5C-8677-56241539609D}'
+    state: present

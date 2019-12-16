@@ -1,23 +1,11 @@
 ---
-- name: Install Nxlog
+- name: Install, configure, (re)start Nxlog
   hosts: windows
   become: yes
   become_method: runas
   become_user: SYSTEM
 
-  tasks:
-  - name: install package
-    win_package:
-      path: http://{{ nls_ip }}/nagioslogserver/scripts/nxlog-ce-latest.msi
-      product_id: '{FC526514-AFD9-4A5C-8677-56241539609D}'
-      state: present
-
-  - name: place nxlog.conf
-    template:
-      src: files/nxlog_conf.j2
-      dest: 'C:\Program Files (x86)\nxlog\conf\nxlog.conf'
-
-  - name: restart nxlog
-    win_service:
-      name: nxlog
-      state: restarted
+  roles:
+  - win_install_nxlog
+  - win_place_nxlog_conf
+  - win_restart_nxlog

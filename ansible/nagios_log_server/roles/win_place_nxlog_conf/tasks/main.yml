@@ -1,0 +1,5 @@
+---
+- name: place nxlog.conf
+  template:
+    src: files/nxlog_conf.j2
+    dest: 'C:\Program Files (x86)\nxlog\conf\nxlog.conf'
