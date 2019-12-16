@@ -15,5 +15,5 @@
   command: semanage port -a -t syslogd_port_t -p tcp 5544
   when: ansible_selinux is defined and ansible_selinux != False and ansible_selinux.status == 'enabled' and ansible_os_family == "RedHat"
   failed_when: 
-  - result.rc != 0
-  - '"5544 already defined" not in result.stderr'
+    - result.rc != 0
+    - '"5544 already defined" not in result.stderr'
