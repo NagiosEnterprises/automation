@@ -1,0 +1,12 @@
+---
+- name: Forward Linux syslog to Nagios Log Server
+  remote_user: root
+  hosts: linux
+
+  roles:
+    - linux_selinux
+    - linux_download_setup_script
+    - linux_base_setup
+    - linux_apacheAccessLog_setup
+    - linux_apacheErrorLog_setup
+    - linux_mysqlLog_setup

@@ -1,0 +1,11 @@
+---
+- name: Install, configure, (re)start Nxlog
+  hosts: windows
+  become: yes
+  become_method: runas
+  become_user: SYSTEM
+
+  roles:
+  - win_install_nxlog
+  - win_place_nxlog_conf
+  - win_restart_nxlog

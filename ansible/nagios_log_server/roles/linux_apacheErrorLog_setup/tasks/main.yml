@@ -1,0 +1,5 @@
+---
+- name: run the script
+  command: './setup-linux.sh -s {{ nls_ip }} -p 5544 -f "/var/log/httpd/error_log" -t apache_error'
+  args:
+    chdir: /tmp
