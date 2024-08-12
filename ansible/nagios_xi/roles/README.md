@@ -16,6 +16,6 @@ The Nagios XI roles should live anywhere you keep roles that you reference in yo
 
 ## Required Ansible Variables
 ### For both xi_host_scheduled_downtime_create/delete 
-`xi_ip` - The IP address (or hostname) of your Nagios XI server
-`xi_api_key` - The API key for a user on your Nagios XI server
-`downtime_comment` - The comment you want to appear in Nagios XI for the downtime. If running from the commandline, you will be prompted for this variable.
+- `xi_ip` - The IP address (or hostname) of your Nagios XI server
+- `xi_api_key` - The API key for a user on your Nagios XI server
+- `downtime_comment` - The comment you want to appear in Nagios XI for the downtime. If running from the commandline, you will be prompted for this variable.
