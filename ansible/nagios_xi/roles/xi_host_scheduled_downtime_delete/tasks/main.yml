@@ -1,0 +1,20 @@
+---
+
+- name: Get Downtime ID
+  uri:
+    url: https://{{ xi_ip }}/nagiosxi/api/v1/objects/downtime?apikey={{ xi_api_key }}&host_name={{ inventory_hostname }}&pretty=0
+    method: GET
+    validate_certs: no
+    timeout: 20
+    return_content: no
+    body_format: json
+  register: downtime_result
+  delegate_to: 127.0.0.1
+
+- name: Delete Downtime
+  uri:
+    url: https://{{ xi_ip }}/nagiosxi/api/v1/system/scheduleddowntime/{{ downtime_result.json.scheduleddowntime[0].internal_id }}?apikey={{ xi_api_key }}&pretty=0
+    method: DELETE
+    validate_certs: no
+    timeout: 20
+  delegate_to: 127.0.0.1

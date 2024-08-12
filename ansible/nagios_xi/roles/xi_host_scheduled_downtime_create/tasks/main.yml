@@ -1,0 +1,20 @@
+---
+
+- name: Set downtime start
+  command: "date +'%s'"
+  register: downtime_start
+  delegate_to: 127.0.0.1
+
+- name: Set downtime end
+  command: "date +'%s' -d '120 minutes' "
+  register: downtime_end
+  delegate_to: 127.0.0.1
+
+- name: Set Downtime
+  uri:
+    url: http://{{ xi_ip }}/nagiosxi/api/v1/system/scheduleddowntime?apikey={{ xi_api_key }}
+    body: "comment={{ downtime_comment }}&start={{ downtime_start.stdout }}&end={{ downtime_end.stdout }}&hosts[]={{ inventory_hostname }}"
+    method: POST
+    validate_certs: no
+    timeout: 20
+  delegate_to: 127.0.0.1
