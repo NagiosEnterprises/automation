@@ -1,0 +1,34 @@
+{
+ "collection_info": {
+  "namespace": "nagios",
+  "name": "nagios_xi",
+  "version": "0.1.0",
+  "authors": [
+   "Nagios Enterprises (github.com/NagiosEnterprises)"
+  ],
+  "readme": "README.md",
+  "tags": [
+    "nagios",
+    "monitoring",
+    "nagiosxi"
+  ],
+  "description": "A collection of Ansible tools designed for use with Nagios XI.",
+  "license_file": [
+   "LICENSE"
+  ],
+  "dependencies": {
+  },
+  "repository": "https://github.com/NagiosEnterprises/automation.git",
+  "documentation": "https://github.com/NagiosEnterprises/automation",
+  "homepage": "https://github.com/NagiosEnterprises/automation",
+  "issues": "https://github.com/NagiosEnterprises/automation/issues"
+ },
+ "file_manifest_file": {
+  "name": "FILES.json",
+  "ftype": "file",
+  "chksum_type": "sha256",
+  "chksum_sha256": "31ca7eb3d22464164904715db3a5757d07438b8eb226bbfb200206144edf9d6f",
+  "format": 1
+ },
+ "format": 1
+}

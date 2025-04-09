@@ -1,0 +1,10 @@
+---
+edit_on_github:
+  repository: NagiosEnterprises/automation
+  branch: main
+  path_prefix: 'ansible/nagiosxi'
+
+communication:
+  forums:
+    - topic: Community Support Forum
+      url: https://support.nagios.com/forum/
