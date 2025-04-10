@@ -10,7 +10,7 @@ DOCUMENTATION = '''
         plugin:
             description: Name of the plugin
             required: True
-            choices: ['nagiosxi']
+            choices: ['nagios.nagios_xi.nagiosxi']
         disable_warnings:
             description: Disable TLS checks for https connections to Nagios XI's API
             required: True
