@@ -1,0 +1,20 @@
+---
+
+namespace: nagios
+name: nagios_cross_platform_agent
+version: 0.1.0
+readme: README.md
+authors:
+  - Michael Bellerue (github.com/MikeBellerue-Nagios)
+description: A collection of Ansible tools designed for use with the Nagios Cross-Platform Agent
+license_file: LICENSE
+tags:
+  - nagios
+  - monitoring
+  - ncpa
+  - nagios_cross_platform_agent
+repository: https://github.com/NagiosEnterprises/automation
+homepage: https://github.com/NagiosEnterprises/automation
+issues: https://github.com/NagiosEnterprises/automation/issues
+build_ignore:
+  - .gitignore

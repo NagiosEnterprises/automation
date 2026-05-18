@@ -1,0 +1,105 @@
+{
+    "files": [
+     {
+      "name": ".",
+      "ftype": "dir",
+      "chksum_type": null,
+      "chksum_sha256": null,
+      "format": 1
+     },
+     {
+      "name": "README.md",
+      "ftype": "file",
+      "chksum_type": "sha256",
+      "chksum_sha256": "bb71fdc16dddcf5cc80e2860eb9486dd9db3e0b4efcb0f0953a35ee88d9026be",
+      "format": 1
+     },
+     {
+        "name": "docs",
+        "ftype": "dir",
+        "chksum_type": null,
+        "chksum_sha256": null,
+        "format": 1
+     },
+     {
+        "name": "docsite",
+        "ftype": "dir",
+        "chksum_type": null,
+        "chksum_sha256": null,
+        "format": 1
+     },
+     {
+        "name": "links.yml",
+        "ftype": "file",
+        "chksum_type": "sha256",
+        "chksum_sha256": "aff3666c9beab13b377e3cfa3e854b3d0b175761dce14af643750d34eb6c0c7a",
+        "format": 1
+     },
+     {
+        "name": "inventory",
+        "ftype": "dir",
+        "chksum_type": null,
+        "chksum_sha256": null,
+        "format": 1
+     },
+     {
+        "name": "inventory/nagiosxi.py",
+        "ftype": "file",
+        "chksum_type": "sha256",
+        "chksum_sha256": "759f772d14ecf78b20b8f625a9a402e24dfa37be53aa88034bee8cfeae618d9f",
+        "format": 1
+     },
+     {
+        "name": "inventory/README.md",
+        "ftype": "file",
+        "chksum_type": "sha256",
+        "chksum_sha256": "97d86f839e0d8efe729e6391d255ae9d2ff68f167a5495ac53837b1c4556d14e",
+        "format": 1
+     },
+     {
+        "name": "meta",
+        "ftype": "dir",
+        "chksum_type": null,
+        "chksum_sha256": null,
+        "format": 1
+     },
+     {
+        "name": "meta/ee-bindep.txt",
+        "ftype": "file",
+        "chksum_type": "sha256",
+        "chksum_sha256": "3d4fe6a7070e1645176738fa9eed2b355a51cdfcc362afab414e3907aef590a0",
+        "format": 1
+     },
+     {
+        "name": "meta/ee-requirements.txt",
+        "ftype": "file",
+        "chksum_type": "sha256",
+        "chksum_sha256": "5425fade5cdbf6524e70c392737f57a85331ff5971298c7b5848942acda60174",
+        "format": 1
+     },
+     {
+        "name": "execution-environment.yml",
+        "ftype": "file",
+        "chksum_type": "sha256",
+        "chksum_sha256": "4d80b192e0813be8f167ddd1aa135ead0531044f8c5f4d8fba1577dd4655cca2",
+        "format": 1
+     },
+     {
+        "name": "runtime.yml",
+        "ftype": "file",
+        "chksum_type": "sha256",
+        "chksum_sha256": "43da2f3193293a9e67107f6e8562d7c95c067a313f718d645e8630094e60296b",
+        "format": 1
+     },
+     {
+        "name": "roles",
+        "ftype": "dir",
+        "chksum_type": null,
+        "chksum_sha256": null,
+        "format": 1
+     },
+     {
+        "name": "xi_host_sch"
+     }
+    ]
+}

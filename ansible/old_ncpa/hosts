@@ -1,0 +1,12 @@
+[linux]
+192.168.1.100
+
+[windows]
+192.168.1.101
+
+[windows:vars]
+ansible_port=5985
+ansible_connection=winrm
+ansible_winrm_server_cert_validation=ignore
+ansible_user=nagios
+ansible_password=demo

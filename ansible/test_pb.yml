@@ -1,0 +1,6 @@
+- hosts: linux
+
+  tasks:
+    - name: Install NCPA
+      nagios.ncpa.ncpa_install:
+        package_source: direct
