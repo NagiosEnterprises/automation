@@ -1,78 +1,6 @@
 #!/usr/bin/python
 
-import subprocess
-
-
-DOCUMENTATION = r'''
----
-module: ncpa_install
-
-short_description: Install and manage Nagios Cross Platform Agent (NCPA)
-
-description:
-  - Installs and manages NCPA on supported operating systems.
-
-options:
-
-  state:
-    description:
-      - Desired package state.
-    choices: [present, absent]
-    default: present
-    type: str
-
-  install_method:
-    description:
-      - Installation method.
-    choices: [package]
-    default: package
-    type: str
-
-  package_source:
-    description:
-      - Whether to install directly or configure repository.
-    choices: [direct, repository]
-    default: direct
-    type: str
-
-  version:
-    description:
-      - Specific NCPA version to install.
-    type: str
-
-author:
-  - Nagios Enterprises
-'''
-
-EXAMPLES = r'''
-- name: Install NCPA directly
-  nagios.ncpa.ncpa_install:
-    package_source: direct
-
-- name: Install NCPA from repository
-  nagios.ncpa.ncpa_install:
-    package_source: repository
-'''
-
-RETURN = r'''
-changed:
-    description: Whether any changes were made
-    type: bool
-    returned: always
-'''
-
-
-def detect_os_info():
-    os_release = {}
-
-    with open("/etc/os-release", "r") as f:
-        for line in f:
-            if "=" in line:
-                k, v = line.strip().split("=", 1)
-                os_release[k] = v.strip('"')
-
-    return os_release.get("ID", "").lower()
-
+import platform
 
 def is_ncpa_installed(module):
 
@@ -87,6 +15,23 @@ def is_ncpa_installed(module):
 
     rc, stdout, stderr = module.run_command(
         [rpm_path, "-q", "ncpa"]
+    )
+
+    return rc == 0
+
+def is_nagios_repo_installed(module):
+
+    rpm_path = module.get_bin_path(
+        "rpm"
+    )
+
+    if not rpm_path:
+        module.fail_json(
+            msg="rpm binary not found"
+        )
+    
+    rc, stdout, stderr = module.run_command(
+        [rpm_path, "-qi", "nagios-repo"]
     )
 
     return rc == 0
@@ -113,11 +58,27 @@ def parse_os_release():
 
     return os_release
 
-def detect_architecture():
-    return "x86_64"
+def detect_architecture(module):
 
-def configure_nagios_repository():
-    pass
+    arch = platform.machine().lower()
+
+    arch_map = {
+        "x86_64": "x86_64",
+        "amd64": "x86_64",
+        "aarch64": "aarch64",
+        "arm64": "aarch64"
+    }
+
+    return arch_map.get(arch, arch)
+
+def get_paths(module):
+    
+    paths = {
+        "rpm": module.get_bin_path("rpm"),
+        "dnf": module.get_bin_path("dnf")
+    }
+    
+    return paths
 
 
 def install_rhel_direct(module):
@@ -125,17 +86,18 @@ def install_rhel_direct(module):
 
     version = module.params.get("version")
     major_release = parse_os_release()
-    architecture = detect_architecture()
+    architecture = detect_architecture(module)
+    paths = get_paths(module)
 
     if is_ncpa_installed(module):
-        module.exit_json(
+        return module.fail_json(
             changed=False,
             msg="NCPA already installed"
         )
 
     if module.check_mode:
         module.exit_json(changed=True)
-
+    
     url = build_rpm_url(
         version,
         major_release["VERSION"],
@@ -147,15 +109,8 @@ def install_rhel_direct(module):
             msg="failed to build url."
         )
 
-    dnf_path = module.get_bin_path( "dnf" )
-
-    if not dnf_path:
-        module.fail_json(
-            msg="dnf binary not found"
-        )
-
     cmd = [
-        dnf_path,
+        paths["dnf"],
         "-y",
         "install",
         url
@@ -178,6 +133,68 @@ def install_rhel_direct(module):
 
 
 def install_rhel_repository(module):
-    module.fail_json(
-        msg="Repository installation not yet implemented"
+    changed = False
+
+    version = module.params.get("version")
+    os_release = parse_os_release()
+    architecture = detect_architecture(module)
+    paths = get_paths(module)
+    repo_dash_map = {
+        "8": 2,
+        "9": 2,
+        "10": 1
+    }
+    repo_dash_num = repo_dash_map[os_release['VERSION_ID']]
+
+    repo_url = (
+        f"https://repo.nagios.com/nagios/"
+        f"{os_release['VERSION_ID']}/"
+        f"nagios-repo-{os_release['VERSION_ID']}"
+        f"-{repo_dash_num}.el{os_release['VERSION_ID']}.noarch.rpm"
     )
+
+    if not is_nagios_repo_installed(module):
+            rc, stdout, stderr = module.run_command(
+                [paths["rpm"], 
+                 "-Uvh", 
+                 repo_url]
+            )
+
+            if rc != 0:
+                module.fail_json(
+                    msg="Failed to install the nagios-repo rpm",
+                    stderr=stderr
+                )
+
+    if is_ncpa_installed(module):
+        module.exit_json(
+            changed=False,
+            msg="NCPA already installed"
+        )
+
+    rc, stdout, stderr = module.run_command(
+        [paths["dnf"], "install", "-y", "ncpa"]
+    )
+
+    if rc != 0:
+        module.fail_json(
+            msg="Failed to install NCPA",
+            stderr=stderr
+        )
+
+    rc = ""
+    stdout = ""
+    stderr = ""
+
+    rc, stdout, stderr = module.run_command(
+        ["systemctl", "enable", "ncpa"]
+    )
+
+    if rc != 0:
+        module.fail_json(
+            msg="Failed to set NCPA to start on boot",
+            stderr=stderr
+        )
+
+    if module.check_mode:
+        return module.exit_json(changed=True)
