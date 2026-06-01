@@ -1,8 +1,7 @@
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.nagios.ncpa.plugins.module_utils.ncpa_common import (
-    install_rhel_direct,
-    install_rhel_repository
+from ansible_collections.nagios.ncpa.plugins.module_utils.rhel import (
+    handle_rhel
 )
 
 DOCUMENTATION = r'''
@@ -76,11 +75,8 @@ def main():
     )
 
     result = ""
-    if module.params.get("package_source") == "repository":
-        result = install_rhel_repository(module)
-    else:
-        result = install_rhel_direct(module)
-    
+    result = handle_rhel(module)
+
     module.exit_json(**result)
 
 if __name__ == "__main__":
