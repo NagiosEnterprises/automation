@@ -2,6 +2,17 @@
 
 from platform import machine
 
+def is_ncpa_installed(module,rpm_path):
+
+    rc, stdout, stderr = module.run_command(
+        [rpm_path, "-q", "ncpa"]
+    )
+    
+    if rc == 0:
+        return True
+    else:
+        return False
+
 def parse_os_release():
 
     os_release = {}

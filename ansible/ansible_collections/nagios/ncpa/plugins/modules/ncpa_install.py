@@ -68,7 +68,7 @@ def main():
         argument_spec=dict(
             state=dict(type='str', default='present', choices=['present', 'absent']),
             install_method=dict(type='str', default='package', choices=['package']),
-            package_source=dict(type='str', default='direct', choices=['direct', 'repository']),
+            package_source=dict(type='str', default='direct', choices=['package', 'repository']),
             version=dict(type='str')
         ),
         supports_check_mode=True
