@@ -2,23 +2,9 @@
 from ansible_collections.nagios.ncpa.plugins.module_utils.ncpa_common import (
     parse_os_release,
     detect_architecture,
-    is_ncpa_installed
+    is_ncpa_installed,
+    is_nagios_repo_installed
 )
-
-def is_nagios_repo_installed(module):
-    # I should make this one more generic and throw it into common, as well.
-
-    rc, stdout, stderr = module.run_command(
-        ["ls", "/etc/yum.repos.d/nagios*"]
-    )
-
-    return rc == 0
-
-def get_install_ncpa_version(module,rpm_path):
-    return {
-        "changed": False,
-        "msg": f"ERROR: get_install_ncpa_version() not implemented yet."
-    }
 
 def build_rpm_url(version, major_release, architecture):
     base_url = "https://assets.nagios.com/downloads/ncpa3"
@@ -132,7 +118,7 @@ def handle_rhel(module):
                 f"-{repo_dash_num}.el{os_release['VERSION_ID']}.noarch.rpm"
             )
 
-            if not is_nagios_repo_installed(module):
+            if not is_nagios_repo_installed(module,paths):
                     rc, stdout, stderr = module.run_command(
                         [paths["rpm"], 
                         "-Uvh", 
