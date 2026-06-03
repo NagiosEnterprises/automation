@@ -48,7 +48,7 @@ author:
 EXAMPLES = r'''
 - name: Install NCPA directly
   nagios.ncpa.ncpa_install:
-    package_source: direct
+    package_source: package
 
 - name: Install NCPA from repository
   nagios.ncpa.ncpa_install:
@@ -68,7 +68,7 @@ def main():
         argument_spec=dict(
             state=dict(type='str', default='present', choices=['present', 'absent']),
             install_method=dict(type='str', default='package', choices=['package']),
-            package_source=dict(type='str', default='direct', choices=['package', 'repository']),
+            package_source=dict(type='str', default='package', choices=['package', 'repository']),
             version=dict(type='str')
         ),
         supports_check_mode=True

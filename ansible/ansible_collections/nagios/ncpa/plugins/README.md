@@ -1,31 +1,53 @@
-# Collections Plugins Directory
+# Nagios Cross-Platform Agent Collection for Ansible
 
-This directory can be used to ship various plugins inside an Ansible collection. Each plugin is placed in a folder that
-is named after the type of plugin it is in. It can also include the `module_utils` and `modules` directory that
-would contain module utils and modules respectively.
+This collection will help users leverage Ansible to deploy and configure the Nagios Cross-Platform Agent within their environment.
 
-Here is an example directory of the majority of plugins currently supported by Ansible:
+## Our mission
 
-```
-└── plugins
-    ├── action
-    ├── become
-    ├── cache
-    ├── callback
-    ├── cliconf
-    ├── connection
-    ├── filter
-    ├── httpapi
-    ├── inventory
-    ├── lookup
-    ├── module_utils
-    ├── modules
-    ├── netconf
-    ├── shell
-    ├── strategy
-    ├── terminal
-    ├── test
-    └── vars
+Our mission is to make the lives of sysadmins easier. Whether that's providing convenient ways to adjust monitoring in your environment, or helping you manage systems that you are monitoring.
+
+## Code of Conduct
+
+We follow the [Ansible Code of Conduct](https://docs.ansible.com/ansible/devel/community/code_of_conduct.html) in all our interactions within this project.
+
+If you encounter abusive behavior, please refer to the [policy violations](https://docs.ansible.com/ansible/devel/community/code_of_conduct.html#policy-violations) section of the Code for information on how to raise a complaint.
+
+## Governance
+
+The process of decision making in this collection is based on discussing and finding consensus among participants.
+
+Every voice is important. If you have something on your mind, create an issue or dedicated discussion and let's discuss it!
+
+
+### Installing the Collection from Ansible Galaxy
+
+Before using this collection, you need to install it with the Ansible Galaxy command-line tool:
+```bash
+ansible-galaxy collection install nagios.ncpa
 ```
 
-A full list of plugin types can be found at [Working With Plugins](https://docs.ansible.com/ansible-core/2.16/plugins/plugins.html).
+You can also include it in a `requirements.yml` file and install it with `ansible-galaxy collection install -r requirements.yml`, using the format:
+```yaml
+---
+collections:
+  - name: nagios.ncpa
+```
+
+Note that if you install the collection from Ansible Galaxy, it will not be upgraded automatically when you upgrade the `ansible` package. To upgrade the collection to the latest available version, run the following command:
+```bash
+ansible-galaxy collection install nagios.ncpa --upgrade
+```
+
+You can also install a specific version of the collection, for example, if you need to downgrade when something is broken in the latest version (please report an issue in this repository). Use the following syntax to install version `0.1.1`:
+
+```bash
+ansible-galaxy collection install nagios.ncpa:==0.1.1
+```
+
+See [using Ansible collections](https://docs.ansible.com/ansible/devel/user_guide/collections_using.html) for more details.
+
+## Licensing
+
+GNU General Public License v3.0 or later.
+
+See [LICENSE](https://www.gnu.org/licenses/gpl-3.0.txt) to see the full text.
