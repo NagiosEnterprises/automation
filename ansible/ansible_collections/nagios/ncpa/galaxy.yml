@@ -1,0 +1,19 @@
+---
+
+namespace: nagios
+name: ncpa
+version: 0.1.0
+readme: README.md
+authors:
+  - Michael Bellerue (github.com/MikeBellerue-Nagios)
+description: A collection of Ansible tools for managing the Nagios Cross-Platform Agent
+license_file: LICENSE
+tags:
+  - nagios
+  - monitoring
+  - ncpa
+repository: https://github.com/NagiosEnterprises/automation
+homepage: https://github.com/NagiosEnterprises/automation
+issues: https://github.com/NagiosEnterprises/automation/issues
+build_ignore:
+  - .gitignore
