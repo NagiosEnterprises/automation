@@ -1,5 +1,3 @@
-
-from time import sleep
 from ansible_collections.nagios.ncpa.plugins.module_utils.ncpa_common import (
     parse_os_release,
     detect_architecture,
@@ -143,7 +141,7 @@ def handle_deb(module):
 
             changed = ensure_file(module, "/tmp/GPG-KEY-NAGIOS-V3", "{}".format(desired_content["v3"]))
             
-            if changed is False:
+            if changed is True:
 
                 # Properly install GPG key
                 rc, stdout, stderr = module.run_command(
@@ -161,8 +159,6 @@ def handle_deb(module):
             rc, stdout, stderr = module.run_command(
                 ["apt-get", "update"]
             )
-
-            sleep(10)
 
             # Install NCPA
             rc, stdout, stderr = module.run_command(
