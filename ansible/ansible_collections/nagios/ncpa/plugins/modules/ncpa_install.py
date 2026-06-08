@@ -1,7 +1,13 @@
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.nagios.ncpa.plugins.module_utils.ncpa_common import (
+   parse_os_release
+)
 from ansible_collections.nagios.ncpa.plugins.module_utils.rhel import (
     handle_rhel
+)
+from ansible_collections.nagios.ncpa.plugins.module_utils.debian import (
+    handle_deb
 )
 
 DOCUMENTATION = r'''
@@ -75,7 +81,14 @@ def main():
     )
 
     result = ""
-    result = handle_rhel(module)
+
+    host_info = parse_os_release()
+
+    
+    if "debian" in host_info["ID"]:
+      result = handle_deb(module)
+    elif "centos" in host_info["ID"]:
+      result = handle_rhel(module)
 
     module.exit_json(**result)
 
