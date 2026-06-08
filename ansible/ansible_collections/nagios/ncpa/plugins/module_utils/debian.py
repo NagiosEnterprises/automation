@@ -1,24 +1,57 @@
-
 from ansible_collections.nagios.ncpa.plugins.module_utils.ncpa_common import (
     parse_os_release,
     detect_architecture,
     is_ncpa_installed,
-    is_nagios_repo_installed
+    ensure_file,
+    get_gpg_keys
 )
 
-def build_rpm_url(version, major_release, architecture):
+def build_deb_sources(repo_url, keyring):
+    return f"""\
+Types: deb
+URIs: {repo_url}
+Suites: /
+Signed-By: {keyring}"""
+
+def build_deb_url(version, architecture):
     base_url = "https://assets.nagios.com/downloads/ncpa3"
 
     if version in [None, "", "latest"]:
-        filename = f"ncpa-latest-1.{architecture}.rpm"
+        filename = f"ncpa-latest-1.{architecture}.deb"
     else:
-        filename = f"ncpa-{version}-1.el{major_release}.{architecture}.rpm"
+        filename = f"ncpa-{version}-1.{architecture}.deb"
     
     return f"{base_url}/{filename}"
 
 def remove_ncpa(module,paths):
     rc, stdout, stderr = module.run_command(
-        [paths["dnf"], "remove", "-y", "ncpa"]
+        [paths["apt-get"], "remove", "-y", "ncpa"]
+    )
+
+    if rc != 0:
+        return {
+            "changed": False,
+            "msg": "Ran into error",
+            "stderr": stderr
+        }
+    
+    return rc == 0
+
+def install_deb_prereqs(module):
+    rc, stdout, stderr = module.run_command(
+                ["apt-get", "install", "gpg", "apt-transport-https", "-y"]
+            )
+
+    if rc !=0:
+        return {
+            "changed": False,
+            "msg": "ERROR: Failed to install gpg and apt-transport-https",
+            "stderr": stderr
+        }
+    
+def remove_deb_repo(module,paths):
+    rc, stdout, stderr = module.run_command(
+        [paths["apt"], "remove", "-y", "nagios-repo"]
     )
 
     if rc != 0:
@@ -30,26 +63,17 @@ def remove_ncpa(module,paths):
 
     return rc == 0
 
-def remove_rhel_repo(module,paths):
-    rc = module.run_command(
-        [paths["dnf"], "remove -y", "nagios-repo"]
-    )
-
-    return rc == 0
-
-
-def handle_rhel(module):
+def handle_deb(module):
     changed = False
     paths = {
-        "rpm": module.get_bin_path("rpm"),
-        "dnf": module.get_bin_path("dnf")
+        "apt": module.get_bin_path("apt-get")
     }
 
-    installed = is_ncpa_installed(module,paths["rpm"])
+    installed = is_ncpa_installed(module, paths["apt"])
 
     if module.params.get("state") == "present":
         
-        if module.check_mode:
+        if module.check_mode is True:
             if installed is True:
                 return {
                     "changed": False,
@@ -58,18 +82,15 @@ def handle_rhel(module):
             else:
                 return {
                     "changed": True,
-                    "msg": "NCPA is not installed, it would be installed"
+                    "msg": "NCPA is not installed, it would be installed."
                 }
-
-
-        version = module.params.get("version")
-        major_release = parse_os_release()
-        architecture = detect_architecture(module)
         
+        version = module.params.get("version")
+        architecture = detect_architecture(module)
+
         if module.params.get("package_source") == "package":
-            url = build_rpm_url(
+            url = build_deb_url(
                 version,
-                major_release["VERSION"],
                 architecture
             )
 
@@ -78,9 +99,9 @@ def handle_rhel(module):
                     "changed": changed,
                     "msg": "ERROR: Failed to build URL"
                 }
-
+            
             cmd = [
-                paths["dnf"],
+                paths["apt"],
                 "-y",
                 "install",
                 url
@@ -88,122 +109,86 @@ def handle_rhel(module):
 
             rc, stdout, stderr = module.run_command(cmd)
 
+            if rc !=0:
+                return {
+                    "changed": changed,
+                    "msg": "ERROR: Failed to install NCPA",
+                    "stderr": stderr
+                }
+            
+            changed = True
+
+            return {
+                "changed": changed,
+                "msg": "NCPA installed successfully"
+            }
+        
+        elif module.params.get("package_source") == "repository":
+        
+            os_release = parse_os_release()
+
+            repo_url = (
+                "https://repo.nagios.com/deb/{}".format(os_release["VERSION_CODENAME"])
+            )
+            
+            desired_content = build_deb_sources(repo_url, "/usr/share/keyrings/nagios.gpg")
+
+            changed = ensure_file(module,"/etc/apt/sources.list.d/nagios.sources", desired_content)
+
+            install_deb_prereqs(module)
+
+            desired_content = get_gpg_keys()
+
+            changed = ensure_file(module, "/tmp/GPG-KEY-NAGIOS-V3", "{}".format(desired_content["v3"]))
+            
+            if changed is True:
+
+                # Properly install GPG key
+                rc, stdout, stderr = module.run_command(
+                    ["gpg", "--dearmor", "-o", "/usr/share/keyrings/nagios.gpg", "/tmp/GPG-KEY-NAGIOS-V3"]
+                )
+
+                if rc != 0:
+                    return {
+                        "changed": changed,
+                        "msg": "ERROR: Failed to --dearmor Nagios GPG key",
+                        "stderr": stderr
+                    }
+            
+            # Update repo
+            rc, stdout, stderr = module.run_command(
+                ["apt-get", "update"]
+            )
+
+            # Install NCPA
+            rc, stdout, stderr = module.run_command(
+                ["apt-get", "install", "ncpa"]
+            )
+
             if rc != 0:
                 return {
                     "changed": changed,
                     "msg": "ERROR: Failed to install NCPA",
                     "stderr": stderr
                 }
-
-            changed = True
-
-            return {
-                "changed": changed,
-                "msg":"NCPA installed successfully"
-            }
-        elif module.params.get("package_source") == "repository":
             
-            os_release = parse_os_release()
-            repo_dash_map = {
-                "8": 2,
-                "9": 2,
-                "10": 1
-            }
-            repo_dash_num = repo_dash_map[os_release['VERSION_ID']]
-
-            repo_url = (
-                f"https://repo.nagios.com/nagios/"
-                f"{os_release['VERSION_ID']}/"
-                f"nagios-repo-{os_release['VERSION_ID']}"
-                f"-{repo_dash_num}.el{os_release['VERSION_ID']}.noarch.rpm"
-            )
-
-            if not is_nagios_repo_installed(module,paths):
-                return {
-                    "changed": changed,
-                    "msg": f"Failed to install the nagios-repo rpm, URL {repo_url}"
-                }
-
-            if is_ncpa_installed(module,paths["rpm"]):
-                return {
-                    "changed": changed,
-                    "msg": "NCPA is already installed"
-                }
-            
-            rc, stdout, stderr = module.run_command(
-                [paths["rpm"], "--import", "https://repo.nagios.com/GPG-KEY-NAGIOS-V2"]
-            )
-
-            if rc != 0:
-                return {
-                    "changed": changed,
-                    "msg": "ERROR: Failed to add Nagios repo key V2",
-                    "stderr": stderr
-                }
-            
-            rc = ""
-            stdout = ""
-            stderr = ""
-
-            rc, stdout, stderr = module.run_command(
-                [paths["rpm"], "--import", "https://repo.nagios.com/GPG-KEY-NAGIOS-V3"]
-            )
-                
-            if rc != 0:
-                return {
-                    "changed": changed,
-                    "msg": "ERROR: Failed to add Nagios repo key v3",
-                    "stderr": stderr
-                }
-            
-            rc = ""
-            stdout = ""
-            stderr = ""
-
-            rc, stdout, stderr = module.run_command(
-                [paths["dnf"], "install", "-y", "ncpa"]
-            )
-
-            if rc != 0:
-                return {
-                    "changed": changed,
-                    "msg": "Failed to install NCPA",
-                    "stderr": stderr
-                }
-
-            rc = ""
-            stdout = ""
-            stderr = ""
-
-            rc, stdout, stderr = module.run_command(
-                ["systemctl", "enable", "ncpa"]
-            )
-
-            if rc != 0:
-                return {
-                    "changed": changed,
-                    "msg": "Failed to set NCPA to start on boot",
-                    "stderr": stderr
-                }
-
             changed = True
 
             return {
                 "changed": changed,
                 "msg": "Nagios repository, and NCPA installed successfully."
             }
-        
+    
         else:
             return {
                 "changed": False,
                 "msg": f"ERROR: Unknown package_source {module.params.get('package_source')}"
             }
-
+    
     elif module.params.get("state") == "absent":
         
         if module.check_mode:
             if installed is False:
-                # Exit saying NCPA is not installed, no changes would be made.
                 return {
                     "changed": False,
                     "msg": "NCPA is not installed, no changes would be made."
@@ -211,9 +196,9 @@ def handle_rhel(module):
             else:
                 return {
                     "changed": True,
-                    "msg": "NCPA is installed, it would be uninstalled"
+                    "msg": "NCPA is installed, it would be uninstalled."
                 }
-        
+            
         if remove_ncpa(module,paths):
             return {
                 "changed": True,
@@ -224,8 +209,7 @@ def handle_rhel(module):
                 "changed": False,
                 "msg": "ERROR: Failed to uninstall NCPA"
             }
-        
-
+    
     else:
         return {
             "changed": False,

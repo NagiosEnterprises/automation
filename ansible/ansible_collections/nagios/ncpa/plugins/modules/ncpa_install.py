@@ -1,7 +1,13 @@
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.nagios.ncpa.plugins.module_utils.ncpa_common import (
+   parse_os_release
+)
 from ansible_collections.nagios.ncpa.plugins.module_utils.rhel import (
     handle_rhel
+)
+from ansible_collections.nagios.ncpa.plugins.module_utils.debian import (
+    handle_deb
 )
 
 DOCUMENTATION = r'''
@@ -48,7 +54,7 @@ author:
 EXAMPLES = r'''
 - name: Install NCPA directly
   nagios.ncpa.ncpa_install:
-    package_source: direct
+    package_source: package
 
 - name: Install NCPA from repository
   nagios.ncpa.ncpa_install:
@@ -68,14 +74,21 @@ def main():
         argument_spec=dict(
             state=dict(type='str', default='present', choices=['present', 'absent']),
             install_method=dict(type='str', default='package', choices=['package']),
-            package_source=dict(type='str', default='direct', choices=['package', 'repository']),
+            package_source=dict(type='str', default='package', choices=['package', 'repository']),
             version=dict(type='str')
         ),
         supports_check_mode=True
     )
 
     result = ""
-    result = handle_rhel(module)
+
+    host_info = parse_os_release()
+
+    
+    if "debian" in host_info["ID"]:
+      result = handle_deb(module)
+    elif "centos" in host_info["ID"]:
+      result = handle_rhel(module)
 
     module.exit_json(**result)
 
