@@ -1,5 +1,10 @@
-from ansible.module_utils.basic import AnsibleModule
 
+from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.nagios.ncpa.plugins.module_utils.ncpa_configure import (
+    build_config,
+    render_config,
+    ensure_file
+)
 
 DOCUMENTATION = r'''
 ---
@@ -207,8 +212,14 @@ def main():
         supports_check_mode=False
     )
 
-    result = ""
     
+    config = build_config(module.params)
+
+    desired_state = render_config(config)
+
+    changed = ensure_file(module, "/usr/local/ncpa/etc/ncpa.cfg")
+
+    module.exit_json(changed=changed)
 
 if __name__ == "__main__":
     main()
