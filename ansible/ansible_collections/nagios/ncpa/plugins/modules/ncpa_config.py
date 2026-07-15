@@ -196,7 +196,7 @@ def main():
             gid=dict(type=str, default="nagios"),
             handlers=dict(type=str, default="none", choices=['none','nrdp']),
             ip=dict(type=str, default="0.0.0.0"),
-            loglevel=dict(type=str, default="info", choices=['debug, info, warning, error']),
+            loglevel=dict(type=str, default="info", choices=['debug', 'info', 'warning', 'error']),
             logfile=dict(type=str, default="var/log/ncpa_listener.log"),
             logmaxmb=dict(type=int, default=5),
             logbackups=dict(type=int, default=5),
@@ -217,7 +217,7 @@ def main():
 
     desired_state = render_config(config)
 
-    changed = ensure_file(module, "/usr/local/ncpa/etc/ncpa.cfg")
+    changed = ensure_file(module, "/usr/local/ncpa/etc/ncpa.cfg", desired_state)
 
     module.exit_json(changed=changed)
 

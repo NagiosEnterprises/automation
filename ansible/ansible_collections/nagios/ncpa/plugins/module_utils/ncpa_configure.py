@@ -15,7 +15,7 @@ def build_config(user_config):
     
     return config
 
-def render_config(module, config_changes):
+def render_config(config_changes):
     lines = []
 
     lines.append("#")
@@ -24,6 +24,32 @@ def render_config(module, config_changes):
     lines.append("#")
 
     lines.append("")
+
+    for key in config_changes.items():
+        if key[0] != "path":
+
+            if config_changes[key] is dict():
+                lines.append("It's a DICT!")
+            else:
+                lines.append("It's not a dict.")    
+                
+            
+            #lines.append("{0}: {1}".format(str(key[0]),str(config_changes[key[0]])))
+            #lines.append("{0}: {1}".format(str(key[0]),str(config_changes[key[0]])))
+        
+        #lines.append(str(value))
+        
+        #if value == dict:
+        #    lines.append("Value == Dict")
+        #else:
+            #lines.append("Value != Dict")
+        #    lines.append(str(type(value)))
+        
+        #lines.append("{0}: {1}".format(key,value))
+            
+        #else:
+            #Pass if it's path
+        #    pass
 
     return "\n".join(lines)
 
@@ -36,7 +62,7 @@ def ensure_file(module, filename, desired_state):
     else:
         current = ""
     
-    if current == desired:
+    if current == desired_state:
         return False
     
     if module.check_mode:
