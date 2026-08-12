@@ -1,0 +1,555 @@
+---
+# Copyright (c) 2026, Chris Story <chris.story@effility.org>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+# 01 - config section tests
+# Creates every CCM object type against the 100-device inventory, applies the
+# configuration, then verifies through two independent paths:
+#   1. objects/ queries (proves the engine really loaded the object)
+#   2. check-mode re-create (proves the CCM record exists: changed==false)
+- name: Config section - create, verify, update
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - vars.yml
+  vars:
+    device_hosts: "{{ groups['nagios_devices'] }}"
+    service_hosts: "{{ groups['nagios_devices'][:10] }}"
+  module_defaults:
+    group/community.nagios_cs.nagios_cs:
+      url: "{{ nagios_url }}"
+      api_key: "{{ nagios_api_key }}"
+      validate_certs: "{{ nagios_validate_certs }}"
+  tasks:
+    - name: Sanity - inventory really has 100 devices in 127.0.1.x
+      ansible.builtin.assert:
+        that:
+          - device_hosts | length == 100
+          - hostvars[device_hosts[0]].ansible_host is match('127\.0\.1\.\d+')
+          - hostvars[device_hosts[-1]].ansible_host is match('127\.0\.1\.\d+')
+
+    # ----------------------------------------------------------- creates
+    - name: "CFG-CMD-01: create command"
+      block:
+        - community.nagios_cs.command:
+            command_name: "{{ sim_command }}"
+            properties:
+              command_line: "$USER1$/check_ping -H $HOSTADDRESS$ -w 3000,80% -c 5000,100% -p 1"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-CMD-01, t_name: "config/command POST (create)", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-CMD-01, t_name: "config/command POST (create)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-TP-01: create timeperiod"
+      block:
+        - community.nagios_cs.timeperiod:
+            timeperiod_name: "{{ sim_timeperiod }}"
+            properties:
+              alias: Simulated business hours
+              monday: "09:00-17:00"
+              tuesday: "09:00-17:00"
+              wednesday: "09:00-17:00"
+              thursday: "09:00-17:00"
+              friday: "09:00-17:00"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-TP-01, t_name: "config/timeperiod POST (create)", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-TP-01, t_name: "config/timeperiod POST (create)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-CT-01: create contact"
+      block:
+        - community.nagios_cs.contact:
+            contact_name: "{{ sim_contact }}"
+            properties:
+              alias: Simulated Contact
+              email: sim@example.com
+              host_notifications_enabled: "1"
+              service_notifications_enabled: "1"
+              host_notification_period: 24x7
+              service_notification_period: 24x7
+              host_notification_options: d,u,r
+              service_notification_options: w,u,c,r
+              host_notification_commands: notify-host-by-email
+              service_notification_commands: notify-service-by-email
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-CT-01, t_name: "config/contact POST (create)", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-CT-01, t_name: "config/contact POST (create)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-CG-01: create contactgroup"
+      block:
+        - community.nagios_cs.contactgroup:
+            contactgroup_name: "{{ sim_contactgroup }}"
+            properties:
+              alias: Simulated on-call
+              members: "{{ sim_contact }}"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-CG-01, t_name: "config/contactgroup POST (create)", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-CG-01, t_name: "config/contactgroup POST (create)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-HOST-01: create all 100 hosts from the inventory"
+      block:
+        - community.nagios_cs.host:
+            host_name: "{{ item }}"
+            properties:
+              alias: "{{ hostvars[item].nagios_alias }}"
+              address: "{{ hostvars[item].ansible_host }}"
+              check_command: "{{ sim_command }}"
+              max_check_attempts: "3"
+              check_interval: "5"
+              retry_interval: "1"
+              check_period: 24x7
+              contact_groups: "{{ sim_contactgroup }}"
+              notification_interval: "5"
+              notification_period: 24x7
+          loop: "{{ device_hosts }}"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-HOST-01, t_name: "config/host POST (create x100)", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-HOST-01, t_name: "config/host POST (create x100)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-HG-01: create hostgroup with all 100 members"
+      block:
+        - community.nagios_cs.hostgroup:
+            hostgroup_name: "{{ sim_hostgroup }}"
+            properties:
+              alias: All simulated devices
+              members: "{{ device_hosts | join(',') }}"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-HG-01, t_name: "config/hostgroup POST (create)", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-HG-01, t_name: "config/hostgroup POST (create)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-SVC-01: create PING service on 10 hosts"
+      block:
+        - community.nagios_cs.service:
+            host_name: "{{ item }}"
+            service_description: "{{ sim_service }}"
+            properties:
+              check_command: "{{ sim_command }}"
+              max_check_attempts: "3"
+              check_interval: "5"
+              retry_interval: "1"
+              check_period: 24x7
+              notification_interval: "5"
+              notification_period: 24x7
+              contact_groups: "{{ sim_contactgroup }}"
+          loop: "{{ service_hosts }}"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-SVC-01, t_name: "config/service POST (create x10)", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-SVC-01, t_name: "config/service POST (create x10)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-SG-01: create servicegroup"
+      block:
+        - community.nagios_cs.servicegroup:
+            servicegroup_name: "{{ sim_servicegroup }}"
+            properties:
+              alias: Simulated PING checks
+              members: "{{ service_hosts[0] }},{{ sim_service }},{{ service_hosts[1] }},{{ sim_service }}"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-SG-01, t_name: "config/servicegroup POST (create)", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-SG-01, t_name: "config/servicegroup POST (create)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-HE-01: create hostescalation"
+      block:
+        - community.nagios_cs.hostescalation:
+            host_name: "{{ device_hosts[0] }}"
+            properties:
+              first_notification: "3"
+              last_notification: "0"
+              notification_interval: "30"
+              contact_groups: "{{ sim_contactgroup }}"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-HE-01, t_name: "config/hostescalation POST (create)", t_status: PASS}
+      rescue:
+        - ansible.builtin.set_fact:
+            escdep_supported: false
+          when: "'Unknown API endpoint' in (ansible_failed_result.msg | default(''))"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-HE-01, t_name: "config/hostescalation POST (create)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-SE-01: create serviceescalation"
+      block:
+        - community.nagios_cs.serviceescalation:
+            host_name: "{{ service_hosts[0] }}"
+            service_description: "{{ sim_service }}"
+            properties:
+              first_notification: "3"
+              last_notification: "0"
+              notification_interval: "15"
+              contact_groups: "{{ sim_contactgroup }}"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-SE-01, t_name: "config/serviceescalation POST (create)", t_status: PASS}
+      rescue:
+        - ansible.builtin.set_fact:
+            escdep_supported: false
+          when: "'Unknown API endpoint' in (ansible_failed_result.msg | default(''))"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-SE-01, t_name: "config/serviceescalation POST (create)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-HD-01: create hostdependency"
+      block:
+        - community.nagios_cs.hostdependency:
+            host_name: "{{ device_hosts[0] }}"
+            dependent_host_name: "{{ device_hosts[1] }}"
+            properties:
+              notification_failure_criteria: d,u
+              execution_failure_criteria: d,u
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-HD-01, t_name: "config/hostdependency POST (create)", t_status: PASS}
+      rescue:
+        - ansible.builtin.set_fact:
+            escdep_supported: false
+          when: "'Unknown API endpoint' in (ansible_failed_result.msg | default(''))"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-HD-01, t_name: "config/hostdependency POST (create)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-SD-01: create servicedependency"
+      block:
+        - community.nagios_cs.servicedependency:
+            host_name: "{{ service_hosts[0] }}"
+            service_description: "{{ sim_service }}"
+            dependent_host_name: "{{ service_hosts[1] }}"
+            dependent_service_description: "{{ sim_service }}"
+            properties:
+              notification_failure_criteria: w,u,c
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-SD-01, t_name: "config/servicedependency POST (create)", t_status: PASS}
+      rescue:
+        - ansible.builtin.set_fact:
+            escdep_supported: false
+          when: "'Unknown API endpoint' in (ansible_failed_result.msg | default(''))"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-SD-01, t_name: "config/servicedependency POST (create)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    # ------------------------------------------------------------- apply
+    - name: "SYS-APPLY-01: apply configuration"
+      block:
+        - community.nagios_cs.apply_config:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-APPLY-01, t_name: "system/applyconfig POST", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-APPLY-01, t_name: "system/applyconfig POST", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    # ----------------------------------------- verify creates (engine view)
+    - name: "VER-HOST-01: engine sees all 100 hosts (add-host verified)"
+      block:
+        - community.nagios_cs.object_info:
+            resource: host
+            query: {host_name: "lk:sim-", records: "200:0"}
+          register: r_hosts
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: (r_hosts.data.recordcount | default(0) | int) >= 100
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-HOST-01, t_name: "objects/host shows 100 created hosts",
+                 t_status: PASS, t_note: "recordcount={{ r_hosts.data.recordcount }}"}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-HOST-01, t_name: "objects/host shows 100 created hosts", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "VER-SVC-01: engine sees the 10 PING services"
+      block:
+        - community.nagios_cs.object_info:
+            resource: service
+            query: {name: "{{ sim_service }}", host_name: "lk:sim-", records: "50:0"}
+          register: r_svcs
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: (r_svcs.data.recordcount | default(0) | int) >= 10
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-SVC-01, t_name: "objects/service shows created services",
+                 t_status: PASS, t_note: "recordcount={{ r_svcs.data.recordcount }}"}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-SVC-01, t_name: "objects/service shows created services", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "VER-NAMED-01: engine sees hostgroup/servicegroup/contact/contactgroup/timeperiod/command"
+      block:
+        - community.nagios_cs.object_info:
+            resource: "{{ item.resource }}"
+            query: {name: "{{ item.name }}"}
+          register: r_named
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: (r_named.data.recordcount | default(0) | int) >= 1
+          loop:
+            - {resource: hostgroup, name: "{{ sim_hostgroup }}"}
+            - {resource: servicegroup, name: "{{ sim_servicegroup }}"}
+            - {resource: contact, name: "{{ sim_contact }}"}
+            - {resource: contactgroup, name: "{{ sim_contactgroup }}"}
+            - {resource: timeperiod, name: "{{ sim_timeperiod }}"}
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-NAMED-01, t_name: "objects/* show 5 created named objects", t_status: PASS,
+                 t_note: "objects/command excluded - not present on all XI releases; command existence is verified at CCM level in VER-CCM-01"}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-NAMED-01, t_name: "objects/* show 5 created named objects", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    # ----------------- verify creates (CCM view via check-mode re-create)
+    # A check-mode "create" that reports changed=false proves the CCM record
+    # exists. This also works for escalations/dependencies, which the
+    # objects/ section of the API does not expose at all.
+    - name: "VER-CCM-01: check-mode re-create reports no change for every type"
+      block:
+        - community.nagios_cs.host: {host_name: "{{ device_hosts[0] }}"}
+          check_mode: true
+          register: r1
+        - community.nagios_cs.service:
+            host_name: "{{ service_hosts[0] }}"
+            service_description: "{{ sim_service }}"
+          check_mode: true
+          register: r2
+        - community.nagios_cs.hostgroup: {hostgroup_name: "{{ sim_hostgroup }}"}
+          check_mode: true
+          register: r3
+        - community.nagios_cs.servicegroup: {servicegroup_name: "{{ sim_servicegroup }}"}
+          check_mode: true
+          register: r4
+        - community.nagios_cs.contact: {contact_name: "{{ sim_contact }}"}
+          check_mode: true
+          register: r5
+        - community.nagios_cs.contactgroup: {contactgroup_name: "{{ sim_contactgroup }}"}
+          check_mode: true
+          register: r6
+        - community.nagios_cs.timeperiod: {timeperiod_name: "{{ sim_timeperiod }}"}
+          check_mode: true
+          register: r7
+        - community.nagios_cs.command: {command_name: "{{ sim_command }}"}
+          check_mode: true
+          register: r8
+        - ansible.builtin.assert:
+            that:
+              - not r1.changed
+              - not r2.changed
+              - not r3.changed
+              - not r4.changed
+              - not r5.changed
+              - not r6.changed
+              - not r7.changed
+              - not r8.changed
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-CCM-01, t_name: "config/* GET finds the 8 named object types (idempotency)",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-CCM-01, t_name: "config/* GET finds the 8 named object types (idempotency)",
+                 t_status: FAIL, t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "VER-CCM-02: escalation/dependency existence (when endpoints exist)"
+      when: escdep_supported | default(true)
+      block:
+        - community.nagios_cs.hostescalation: {host_name: "{{ device_hosts[0] }}"}
+          check_mode: true
+          register: r9
+        - community.nagios_cs.serviceescalation:
+            host_name: "{{ service_hosts[0] }}"
+            service_description: "{{ sim_service }}"
+          check_mode: true
+          register: r10
+        - community.nagios_cs.hostdependency:
+            host_name: "{{ device_hosts[0] }}"
+            dependent_host_name: "{{ device_hosts[1] }}"
+          check_mode: true
+          register: r11
+        - community.nagios_cs.servicedependency:
+            host_name: "{{ service_hosts[0] }}"
+            service_description: "{{ sim_service }}"
+            dependent_host_name: "{{ service_hosts[1] }}"
+            dependent_service_description: "{{ sim_service }}"
+          check_mode: true
+          register: r12
+        - ansible.builtin.assert:
+            that:
+              - not r9.changed
+              - not r10.changed
+              - not r11.changed
+              - not r12.changed
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-CCM-02, t_name: "config/*escalation + *dependency GET finds created objects",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-CCM-02, t_name: "config/*escalation + *dependency GET finds created objects",
+                 t_status: FAIL, t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "VER-CCM-02: skipped - endpoints absent in this XI release"
+      ansible.builtin.include_tasks: tasks/record.yml
+      vars: {t_id: VER-CCM-02, t_name: "config/*escalation + *dependency GET finds created objects",
+             t_status: SKIP,
+             t_note: "config/{host,service}{escalation,dependency} endpoints not present in this Nagios XI release (missing from the API)"}
+      when: not (escdep_supported | default(true))
+
+    # ------------------------------------------------------------ updates
+    - name: "CFG-HOST-02: update host alias, apply, verify via objects/host"
+      block:
+        - community.nagios_cs.host:
+            host_name: "{{ device_hosts[0] }}"
+            properties: {alias: UPDATED-ALIAS}
+          register: r_up
+        - ansible.builtin.assert: {that: [r_up.changed]}
+        - community.nagios_cs.apply_config:
+        - community.nagios_cs.object_info:
+            resource: host
+            query: {host_name: "{{ device_hosts[0] }}"}
+          register: r_check
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: >
+            (r_check.data.host | default([]) | map(attribute='alias') | list)
+            is contains('UPDATED-ALIAS')
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-HOST-02, t_name: "config/host PUT (update) verified via objects/host",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-HOST-02, t_name: "config/host PUT (update) verified via objects/host",
+                 t_status: FAIL, t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-UPD-01: config/service PUT + idempotent re-run"
+      block:
+        - community.nagios_cs.service:
+            host_name: "{{ service_hosts[0] }}"
+            service_description: "{{ sim_service }}"
+            properties: {max_check_attempts: "5"}
+          register: u_svc
+        - ansible.builtin.assert:
+            that: [u_svc.changed]
+        - community.nagios_cs.service:
+            host_name: "{{ service_hosts[0] }}"
+            service_description: "{{ sim_service }}"
+            properties: {max_check_attempts: "5"}
+          register: v_svc
+        - ansible.builtin.assert:
+            that: [not v_svc.changed]
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-UPD-01, t_name: "config/service PUT (update) verified by idempotent re-run",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-UPD-01, t_name: "config/service PUT (update) verified by idempotent re-run",
+                 t_status: FAIL, t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-UPD-01b: config/hostgroup PUT + idempotent re-run"
+      block:
+        - community.nagios_cs.hostgroup:
+            hostgroup_name: "{{ sim_hostgroup }}"
+            properties: {alias: All simulated devices v2}
+          register: u_hg
+        - ansible.builtin.assert:
+            that: [u_hg.changed]
+        - community.nagios_cs.hostgroup:
+            hostgroup_name: "{{ sim_hostgroup }}"
+            properties: {alias: All simulated devices v2}
+          register: v_hg
+        - ansible.builtin.assert:
+            that: [not v_hg.changed]
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-UPD-01b, t_name: "config/hostgroup PUT (update) verified by idempotent re-run",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-UPD-01b, t_name: "config/hostgroup PUT (update) verified by idempotent re-run",
+                 t_status: FAIL, t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-UPD-01c: config/contact PUT + idempotent re-run"
+      block:
+        - community.nagios_cs.contact:
+            contact_name: "{{ sim_contact }}"
+            properties: {email: sim-updated@example.com}
+          register: u_ct
+        - ansible.builtin.assert:
+            that: [u_ct.changed]
+        - community.nagios_cs.contact:
+            contact_name: "{{ sim_contact }}"
+            properties: {email: sim-updated@example.com}
+          register: v_ct
+        - ansible.builtin.assert:
+            that: [not v_ct.changed]
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-UPD-01c, t_name: "config/contact PUT (update) verified by idempotent re-run",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-UPD-01c, t_name: "config/contact PUT (update) verified by idempotent re-run",
+                 t_status: FAIL, t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-UPD-01d: config/timeperiod PUT + idempotent re-run"
+      block:
+        - community.nagios_cs.timeperiod:
+            timeperiod_name: "{{ sim_timeperiod }}"
+            properties: {alias: Simulated business hours v2}
+          register: u_tp
+        - ansible.builtin.assert:
+            that: [u_tp.changed]
+        - community.nagios_cs.timeperiod:
+            timeperiod_name: "{{ sim_timeperiod }}"
+            properties: {alias: Simulated business hours v2}
+          register: v_tp
+        - ansible.builtin.assert:
+            that: [not v_tp.changed]
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-UPD-01d, t_name: "config/timeperiod PUT (update) verified by idempotent re-run",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-UPD-01d, t_name: "config/timeperiod PUT (update) verified by idempotent re-run",
+                 t_status: FAIL, t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-UPD-01e: config/command PUT + idempotent re-run"
+      block:
+        - community.nagios_cs.command:
+            command_name: "{{ sim_command }}"
+            properties: {command_line: "$USER1$/check_ping -H $HOSTADDRESS$ -w 3000,80% -c 5000,100% -p 2"}
+          register: u_cmd
+        - ansible.builtin.assert:
+            that: [u_cmd.changed]
+        - community.nagios_cs.command:
+            command_name: "{{ sim_command }}"
+            properties: {command_line: "$USER1$/check_ping -H $HOSTADDRESS$ -w 3000,80% -c 5000,100% -p 2"}
+          register: v_cmd
+        - ansible.builtin.assert:
+            that: [not v_cmd.changed]
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-UPD-01e, t_name: "config/command PUT (update) verified by idempotent re-run",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: CFG-UPD-01e, t_name: "config/command PUT (update) verified by idempotent re-run",
+                 t_status: FAIL, t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "CFG-UPD-02: escalation/dependency updates - NOT SUPPORTED by API"
+      ansible.builtin.include_tasks: tasks/record.yml
+      vars:
+        t_id: CFG-UPD-02
+        t_name: "config/{host,service}{escalation,dependency} PUT"
+        t_status: SKIP
+        t_note: "Missing from Nagios XI API: no documented PUT for escalations/dependencies (no unique ID). Workaround: delete + re-create."

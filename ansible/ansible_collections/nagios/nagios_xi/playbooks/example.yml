@@ -1,0 +1,180 @@
+---
+# Copyright (c) 2026, Chris Story <chris.story@effility.org>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+# End-to-end example exercising the objects, config, and system sections.
+# Run with:
+#   ansible-playbook playbooks/example.yml -e nagios_url=https://nagios.example.com -e nagios_api_key=XXXX
+- name: Nagios XI end-to-end example
+  hosts: localhost
+  gather_facts: false
+  module_defaults:
+    group/community.nagios_cs.nagios_cs:
+      url: "{{ nagios_url }}"
+      api_key: "{{ nagios_api_key }}"
+      validate_certs: false
+
+  tasks:
+    # ------------------------------------------------------------- system
+    - name: Verify the XI server is up and get its version
+      community.nagios_cs.system_info:
+      register: xi_info
+
+    - name: Show product info
+      ansible.builtin.debug:
+        var: xi_info.info
+
+    - name: Check daemon status in detail
+      community.nagios_cs.system_status:
+        detailed: true
+
+    # ------------------------------------------------------------- config
+    - name: Notification command
+      community.nagios_cs.command:
+        command_name: notify-ops-by-email
+        properties:
+          command_line: >-
+            /usr/bin/printf "%b" "Nagios alert: $HOSTNAME$ is $HOSTSTATE$"
+            | /bin/mail -s "Nagios alert" ops@example.com
+
+    - name: Business-hours time period
+      community.nagios_cs.timeperiod:
+        timeperiod_name: business-hours
+        properties:
+          alias: Business Hours
+          monday: "09:00-17:00"
+          tuesday: "09:00-17:00"
+          wednesday: "09:00-17:00"
+          thursday: "09:00-17:00"
+          friday: "09:00-17:00"
+
+    - name: On-call contact
+      community.nagios_cs.contact:
+        contact_name: ops-jane
+        properties:
+          alias: Jane Ops
+          email: jane@example.com
+          host_notification_period: 24x7
+          service_notification_period: 24x7
+          host_notification_options: d,u,r
+          service_notification_options: w,u,c,r
+          host_notification_commands: notify-host-by-email
+          service_notification_commands: notify-service-by-email
+
+    - name: On-call contact group
+      community.nagios_cs.contactgroup:
+        contactgroup_name: on-call
+        properties:
+          alias: On-call rotation
+          members: ops-jane
+
+    - name: Web servers
+      community.nagios_cs.host:
+        host_name: "{{ item }}"
+        properties:
+          address: "192.168.1.{{ 50 + idx }}"
+          check_command: check-host-alive!3000,80%!5000,100%
+          max_check_attempts: "5"
+          check_period: 24x7
+          contact_groups: on-call
+          notification_interval: "5"
+          notification_period: 24x7
+      loop: [web01, web02]
+      loop_control:
+        index_var: idx
+
+    - name: Web host group
+      community.nagios_cs.hostgroup:
+        hostgroup_name: web-servers
+        properties:
+          alias: Web Servers
+          members: web01,web02
+
+    - name: HTTP service on each web server
+      community.nagios_cs.service:
+        host_name: "{{ item }}"
+        service_description: HTTP
+        properties:
+          check_command: check_http
+          max_check_attempts: "5"
+          check_interval: "5"
+          retry_interval: "1"
+          check_period: 24x7
+          notification_interval: "5"
+          notification_period: 24x7
+          contact_groups: on-call
+      loop: [web01, web02]
+
+    - name: Escalate long-running HTTP problems to on-call
+      community.nagios_cs.serviceescalation:
+        host_name: web01
+        service_description: HTTP
+        properties:
+          first_notification: "3"
+          last_notification: "0"
+          notification_interval: "15"
+          contact_groups: on-call
+
+    - name: HTTP on web02 depends on web01's HTTP
+      community.nagios_cs.servicedependency:
+        host_name: web01
+        service_description: HTTP
+        dependent_host_name: web02
+        dependent_service_description: HTTP
+        properties:
+          notification_failure_criteria: w,u,c
+
+    - name: Apply the configuration once, at the end
+      community.nagios_cs.apply_config:
+
+    # ------------------------------------------------------------ objects
+    - name: Wait a moment for the engine to reload, then read host status
+      community.nagios_cs.object_info:
+        resource: hoststatus
+        query:
+          host_name: "in:web01,web02"
+      register: web_status
+      retries: 5
+      delay: 10
+      until: web_status is succeeded
+
+    - name: Anything currently DOWN?
+      community.nagios_cs.object_info:
+        resource: hoststatus
+        query:
+          current_state: 1
+
+    # ---------------------------------------------------- system (actions)
+    - name: Schedule a 1 hour downtime for the whole web tier
+      community.nagios_cs.scheduled_downtime:
+        comment: Example maintenance window
+        start: "{{ now(utc=true).timestamp() | int }}"
+        end: "{{ (now(utc=true).timestamp() | int) + 3600 }}"
+        hostgroups: [web-servers]
+
+    - name: Acknowledge any lingering problems
+      community.nagios_cs.mass_acknowledge:
+        comment: Known issue during rollout
+        hosts: [web01, web02]
+
+    - name: Force an immediate recheck
+      community.nagios_cs.mass_immediate_check:
+        hosts: [web01, web02]
+
+    - name: Create a read-only XI user for the dashboard TV
+      community.nagios_cs.user:
+        username: dashboard
+        name: Dashboard Viewer
+        email: dashboard@example.com
+        password: "{{ dashboard_password | default('ChangeMe!123') }}"
+        auth_level: user
+
+    - name: Mint a 60 minute auto-login token for it
+      community.nagios_cs.auth_token:
+        username: dashboard
+        valid_min: 60
+      register: token
+
+    - name: Anything the API lacks a module for -> raw core command
+      community.nagios_cs.core_command:
+        command: "SCHEDULE_FORCED_HOST_CHECK;web01;{{ now(utc=true).timestamp() | int }}"

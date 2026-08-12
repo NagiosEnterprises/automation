@@ -1,0 +1,12 @@
+---
+# Copyright (c) 2026, Chris Story <chris.story@effility.org>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Master runner. Usage:
+#   ansible-playbook -i inventory/hosts.yml run_all.yml \
+#     -e nagios_url=https://nagios.example.com -e nagios_api_key=XXXX
+- import_playbook: 01_config_tests.yml
+- import_playbook: 02_objects_tests.yml
+- import_playbook: 03_system_tests.yml
+- import_playbook: 04_cleanup_delete_tests.yml
+- import_playbook: 05_report.yml

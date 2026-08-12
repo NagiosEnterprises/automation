@@ -1,0 +1,30 @@
+---
+# Copyright (c) 2026, Chris Story <chris.story@effility.org>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Append one test result to the run-wide results list on localhost.
+# Include with:  vars: {t_id: ..., t_name: ..., t_status: PASS|FAIL|PARTIAL|SKIP, t_note: ...}
+#
+# Automatic classification of failures:
+#   - note contains "Unknown API endpoint"  -> SKIP (endpoint missing from
+#     this XI release; a capability gap, recorded for the report)
+#   - note contains "NAGIOS XI API ANOMALY" or an HTTP 5xx error
+#     -> BUG (a defect in the Nagios XI API itself; report it to Nagios.
+#     Per project policy these are surfaced, never coded around.)
+- name: "Record result {{ t_id }}"
+  vars:
+    _note_in: "{{ t_note | default('') }}"
+    _is_fail: "{{ t_status == 'FAIL' }}"
+    _api_gap: "{{ _is_fail | bool and 'Unknown API endpoint' in _note_in }}"
+    _api_bug: >-
+      {{ _is_fail | bool and not (_api_gap | bool) and
+         ('NAGIOS XI API ANOMALY' in _note_in or 'HTTP 50' in _note_in) }}
+    _status: "{{ 'SKIP' if _api_gap | bool else ('BUG' if _api_bug | bool else t_status) }}"
+    _note: >-
+      {{ 'Endpoint not present in this Nagios XI release (missing from the API): ' ~ _note_in
+         if _api_gap | bool else
+         ('REPORT TO NAGIOS: ' ~ _note_in if _api_bug | bool else _note_in) }}
+  ansible.builtin.set_fact:
+    test_results: >-
+      {{ (test_results | default([])) +
+         [ {'id': t_id, 'name': t_name, 'status': _status, 'note': _note} ] }}
