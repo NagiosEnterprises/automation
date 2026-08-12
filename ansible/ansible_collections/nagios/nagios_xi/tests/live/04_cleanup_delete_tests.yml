@@ -1,0 +1,179 @@
+---
+# Copyright (c) 2026, Chris Story <chris.story@effility.org>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+# 04 - delete tests + cleanup
+# Removes everything created by the suite. Every deletion is a test in its
+# own right: absence is verified via objects/ queries (engine view) and via
+# check-mode re-create reporting changed=true (CCM view).
+- name: Config section - delete and verify absence
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - vars.yml
+  vars:
+    device_hosts: "{{ groups['nagios_devices'] }}"
+    service_hosts: "{{ groups['nagios_devices'][:10] }}"
+  module_defaults:
+    group/community.nagios_cs.nagios_cs:
+      url: "{{ nagios_url }}"
+      api_key: "{{ nagios_api_key }}"
+      validate_certs: "{{ nagios_validate_certs }}"
+  tasks:
+    - name: "DEL-DEP-01: delete escalations + dependencies"
+      when: escdep_supported | default(true)
+      block:
+        - community.nagios_cs.servicedependency:
+            host_name: "{{ service_hosts[0] }}"
+            service_description: "{{ sim_service }}"
+            dependent_host_name: "{{ service_hosts[1] }}"
+            dependent_service_description: "{{ sim_service }}"
+            state: absent
+        - community.nagios_cs.hostdependency:
+            host_name: "{{ device_hosts[0] }}"
+            dependent_host_name: "{{ device_hosts[1] }}"
+            state: absent
+        - community.nagios_cs.serviceescalation:
+            host_name: "{{ service_hosts[0] }}"
+            service_description: "{{ sim_service }}"
+            state: absent
+        - community.nagios_cs.hostescalation:
+            host_name: "{{ device_hosts[0] }}"
+            state: absent
+        # verify absence: a check-mode create must now report changed=true
+        - community.nagios_cs.hostescalation:
+            host_name: "{{ device_hosts[0] }}"
+          check_mode: true
+          register: v_he
+        - community.nagios_cs.hostdependency:
+            host_name: "{{ device_hosts[0] }}"
+            dependent_host_name: "{{ device_hosts[1] }}"
+          check_mode: true
+          register: v_hd
+        - ansible.builtin.assert:
+            that: [v_he.changed, v_hd.changed]
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: DEL-DEP-01, t_name: "config/*escalation + *dependency DELETE, absence verified",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: DEL-DEP-01, t_name: "escalation/dependency DELETE", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "DEL-DEP-01: skipped - endpoints absent in this XI release"
+      ansible.builtin.include_tasks: tasks/record.yml
+      vars: {t_id: DEL-DEP-01, t_name: "config/*escalation + *dependency DELETE",
+             t_status: SKIP,
+             t_note: "config/{host,service}{escalation,dependency} endpoints not present in this Nagios XI release"}
+      when: not (escdep_supported | default(true))
+
+    - name: "DEL-SVC-01: delete servicegroup + services"
+      block:
+        - community.nagios_cs.servicegroup:
+            servicegroup_name: "{{ sim_servicegroup }}"
+            state: absent
+        - community.nagios_cs.service:
+            host_name: "{{ item }}"
+            service_description: "{{ sim_service }}"
+            state: absent
+          loop: "{{ service_hosts }}"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: DEL-SVC-01, t_name: "config/servicegroup + config/service DELETE", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: DEL-SVC-01, t_name: "servicegroup/service DELETE", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "DEL-HOST-01: delete hostgroup + all 100 hosts"
+      block:
+        - community.nagios_cs.hostgroup:
+            hostgroup_name: "{{ sim_hostgroup }}"
+            state: absent
+        - community.nagios_cs.host:
+            host_name: "{{ item }}"
+            state: absent
+          loop: "{{ device_hosts }}"
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: DEL-HOST-01, t_name: "config/hostgroup + config/host DELETE (x100)", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: DEL-HOST-01, t_name: "hostgroup/host DELETE", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "DEL-MISC-01: delete contactgroup, contact, timeperiod, command"
+      block:
+        - community.nagios_cs.contactgroup: {contactgroup_name: "{{ sim_contactgroup }}", state: absent}
+        - community.nagios_cs.contact: {contact_name: "{{ sim_contact }}", state: absent}
+        - community.nagios_cs.timeperiod: {timeperiod_name: "{{ sim_timeperiod }}", state: absent}
+        - community.nagios_cs.command: {command_name: "{{ sim_command }}", state: absent}
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: DEL-MISC-01, t_name: "config/{contactgroup,contact,timeperiod,command} DELETE",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: DEL-MISC-01, t_name: "contact/timeperiod/command DELETE", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "SYS-APPLY-02: apply configuration after deletions"
+      block:
+        - community.nagios_cs.apply_config:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-APPLY-02, t_name: "system/applyconfig POST (post-delete)", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-APPLY-02, t_name: "system/applyconfig POST (post-delete)", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "VER-DEL-01: engine no longer sees any sim- host (delete-host verified)"
+      block:
+        - community.nagios_cs.object_info:
+            resource: host
+            query: {host_name: "lk:sim-", records: "200:0"}
+          register: r_gone
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: (r_gone.data.recordcount | default(1) | int) == 0
+        # CCM view: check-mode re-create must report changed=true for all types
+        - community.nagios_cs.host: {host_name: "{{ device_hosts[0] }}"}
+          check_mode: true
+          register: g1
+        - community.nagios_cs.service:
+            host_name: "{{ service_hosts[0] }}"
+            service_description: "{{ sim_service }}"
+          check_mode: true
+          register: g2
+        - community.nagios_cs.hostgroup: {hostgroup_name: "{{ sim_hostgroup }}"}
+          check_mode: true
+          register: g3
+        - community.nagios_cs.servicegroup: {servicegroup_name: "{{ sim_servicegroup }}"}
+          check_mode: true
+          register: g4
+        - community.nagios_cs.contact: {contact_name: "{{ sim_contact }}"}
+          check_mode: true
+          register: g5
+        - community.nagios_cs.contactgroup: {contactgroup_name: "{{ sim_contactgroup }}"}
+          check_mode: true
+          register: g6
+        - community.nagios_cs.timeperiod: {timeperiod_name: "{{ sim_timeperiod }}"}
+          check_mode: true
+          register: g7
+        - community.nagios_cs.command: {command_name: "{{ sim_command }}"}
+          check_mode: true
+          register: g8
+        - ansible.builtin.assert:
+            that:
+              - g1.changed
+              - g2.changed
+              - g3.changed
+              - g4.changed
+              - g5.changed
+              - g6.changed
+              - g7.changed
+              - g8.changed
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-DEL-01, t_name: "All deletions verified absent (objects/ + CCM check-mode)",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: VER-DEL-01, t_name: "Deletion absence verification", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}

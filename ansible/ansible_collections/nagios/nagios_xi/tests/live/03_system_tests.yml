@@ -1,0 +1,242 @@
+---
+# Copyright (c) 2026, Chris Story <chris.story@effility.org>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+# 03 - system section tests
+# Every system/ endpoint, each verified through an independent read wherever
+# the API makes that possible.
+- name: System section - operations with verification
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - vars.yml
+  vars:
+    device_hosts: "{{ groups['nagios_devices'] }}"
+  module_defaults:
+    group/community.nagios_cs.nagios_cs:
+      url: "{{ nagios_url }}"
+      api_key: "{{ nagios_api_key }}"
+      validate_certs: "{{ nagios_validate_certs }}"
+  tasks:
+    - name: "SYS-INFO-01: system/info returns product + version"
+      block:
+        - community.nagios_cs.system_info:
+          register: r_info
+        - ansible.builtin.assert:
+            that:
+              - r_info.info is mapping
+              - r_info.info | length > 0
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-INFO-01, t_name: "system/info GET", t_status: PASS,
+                 t_note: "version={{ r_info.info.version | default(r_info.info) }}"}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-INFO-01, t_name: "system/info GET", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "SYS-STAT-01: system/status and system/statusdetail"
+      block:
+        - community.nagios_cs.system_status:
+          register: r_stat
+        - community.nagios_cs.system_status:
+            detailed: true
+          register: r_statd
+        - ansible.builtin.assert:
+            that:
+              - r_stat.status is mapping
+              - r_statd.status is mapping
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-STAT-01, t_name: "system/status + system/statusdetail GET", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-STAT-01, t_name: "system/status + system/statusdetail GET", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    # ---------------------------------------------------------- users
+    - name: "SYS-USER-01: create user, verify it exists, then verify idempotency"
+      block:
+        - community.nagios_cs.user:
+            username: "{{ sim_user }}"
+            name: Simulated Tester
+            email: sim-tester@example.com
+            password: "SimT3st!{{ 999999 | random }}"
+            auth_level: user
+          register: r_user
+        - community.nagios_cs.user_info:
+          register: r_users
+        - ansible.builtin.assert:
+            that:
+              - r_users.users | string is search(sim_user)
+        - community.nagios_cs.user:
+            username: "{{ sim_user }}"
+            name: Simulated Tester
+            email: sim-tester@example.com
+            password: irrelevant-when-existing
+          register: r_user2
+        - ansible.builtin.assert:
+            that: [not r_user2.changed]
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-USER-01, t_name: "system/user POST (add) verified via system/user GET",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-USER-01, t_name: "system/user POST (add) verified via GET", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "SYS-TOKEN-01: mint an auth token for the test user"
+      block:
+        - community.nagios_cs.auth_token:
+            username: "{{ sim_user }}"
+            valid_min: 5
+          register: r_token
+        - ansible.builtin.assert:
+            that:
+              - r_token.api_response is defined
+              - r_token.api_response | string | length > 0
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-TOKEN-01, t_name: "system/authtoken POST", t_status: PARTIAL,
+                 t_note: "Token returned. Missing from API: no endpoint to validate or list tokens, so validity is not verifiable via the API."}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-TOKEN-01, t_name: "system/authtoken POST", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "SYS-USER-02: delete user and verify it is gone"
+      block:
+        - community.nagios_cs.user:
+            username: "{{ sim_user }}"
+            state: absent
+          register: r_del
+        - ansible.builtin.assert: {that: [r_del.changed]}
+        - community.nagios_cs.user_info:
+          register: r_users_after
+        - ansible.builtin.assert:
+            that:
+              - not (r_users_after.users | string is search(sim_user))
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-USER-02, t_name: "system/user DELETE verified via system/user GET",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-USER-02, t_name: "system/user DELETE verified via GET", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    # --------------------------------------------------------- downtime
+    - name: "SYS-DT-01: schedule downtime, verify, delete by id, verify gone"
+      block:
+        - community.nagios_cs.scheduled_downtime:
+            comment: ansible-test-downtime
+            start: "{{ '%s' | strftime | int }}"
+            end: "{{ ('%s' | strftime | int) + 3600 }}"
+            hosts: ["{{ device_hosts[2] }}"]
+        - community.nagios_cs.object_info:
+            resource: downtime
+            query: {host_name: "{{ device_hosts[2] }}"}
+          register: r_dt
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: (r_dt.data.recordcount | default(0) | int) >= 1
+        - ansible.builtin.set_fact:
+            dt_records: >-
+              {{ r_dt.data.downtime
+                 | default(r_dt.data.scheduleddowntime
+                 | default(r_dt.data.downtimehistory | default([]))) }}
+        - ansible.builtin.set_fact:
+            dt_first: "{{ dt_records | first | default({}) }}"
+        - ansible.builtin.set_fact:
+            dt_id: >-
+              {{ dt_first.internal_downtime_id
+                 | default(dt_first.downtime_id
+                 | default(dt_first.scheduleddowntime_id
+                 | default(dt_first.id | default(0)))) }}
+        - ansible.builtin.assert: {that: ["dt_id | int > 0"]}
+        - community.nagios_cs.scheduled_downtime:
+            state: absent
+            downtime_id: "{{ dt_id | int }}"
+        - community.nagios_cs.object_info:
+            resource: downtime
+            query: {host_name: "{{ device_hosts[2] }}"}
+          register: r_dt_gone
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: (r_dt_gone.data.recordcount | default(1) | int) == 0
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-DT-01, t_name: "system/scheduleddowntime POST + DELETE, verified via objects/downtime",
+                 t_status: PASS, t_note: "internal_downtime_id={{ dt_id }}"}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-DT-01, t_name: "system/scheduleddowntime round trip", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    # --------------------------------------------- mass immediate check
+    - name: "SYS-CHK-01: mass immediate check verified via last_check advancing"
+      block:
+        - community.nagios_cs.object_info:
+            resource: hoststatus
+            query: {host_name: "{{ device_hosts[3] }}"}
+          register: r_before
+        - ansible.builtin.set_fact:
+            last_check_before: >-
+              {{ (r_before.data.hoststatus | default([{}]) | first).last_check | default('') }}
+        - community.nagios_cs.mass_immediate_check:
+            hosts: ["{{ device_hosts[3] }}"]
+        - community.nagios_cs.object_info:
+            resource: hoststatus
+            query: {host_name: "{{ device_hosts[3] }}"}
+          register: r_after
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: >-
+            (r_after.data.hoststatus | default([{}]) | first).last_check | default('')
+            != last_check_before
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-CHK-01, t_name: "system/massimmediatecheck POST verified via hoststatus last_check",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-CHK-01, t_name: "system/massimmediatecheck POST", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    # ------------------------------------------------- mass acknowledge
+    - name: "SYS-ACK-01: mass acknowledge (hosts are UP, so API-success only)"
+      block:
+        - community.nagios_cs.mass_acknowledge:
+            comment: ansible-test-ack
+            hosts: ["{{ device_hosts[4] }}"]
+            services: ["{{ device_hosts[0] }}!{{ sim_service }}"]
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-ACK-01, t_name: "system/massacknowledge POST", t_status: PARTIAL,
+                 t_note: "API accepted the request. 127.0.1.x hosts answer ping locally and are UP, so no problem state to ack."}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-ACK-01, t_name: "system/massacknowledge POST", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    # ------------------------------------------------------ corecommand
+    # Fully verified round trip already ran in OBJ-04 (ADD/DEL_HOST_COMMENT).
+    - name: "SYS-CMD-01: corecommand forced host check verified via last_check"
+      block:
+        - community.nagios_cs.object_info:
+            resource: hoststatus
+            query: {host_name: "{{ device_hosts[5] }}"}
+          register: r_b
+        - ansible.builtin.set_fact:
+            cc_before: "{{ (r_b.data.hoststatus | default([{}]) | first).last_check | default('') }}"
+        - community.nagios_cs.core_command:
+            command: "SCHEDULE_FORCED_HOST_CHECK;{{ device_hosts[5] }};{{ '%s' | strftime }}"
+        - community.nagios_cs.object_info:
+            resource: hoststatus
+            query: {host_name: "{{ device_hosts[5] }}"}
+          register: r_a
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: >-
+            (r_a.data.hoststatus | default([{}]) | first).last_check | default('') != cc_before
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-CMD-01, t_name: "system/corecommand POST verified via hoststatus last_check",
+                 t_status: PASS,
+                 t_note: "Note: corecommand itself is fire-and-forget; the API returns no per-command result, so verification is by side effect."}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: SYS-CMD-01, t_name: "system/corecommand POST", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}

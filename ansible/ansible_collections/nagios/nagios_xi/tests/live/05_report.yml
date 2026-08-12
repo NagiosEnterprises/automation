@@ -1,0 +1,36 @@
+---
+# Copyright (c) 2026, Chris Story <chris.story@effility.org>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+# 05 - write the run report collected across all previous plays
+- name: Generate test run report
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Ensure there are results to report
+      ansible.builtin.set_fact:
+        test_results: "{{ test_results | default([]) }}"
+
+    - name: Write markdown report
+      ansible.builtin.template:
+        src: templates/report.md.j2
+        dest: "{{ playbook_dir }}/nagios_cs_test_report.md"
+        mode: "0644"
+
+    - name: Show summary
+      ansible.builtin.debug:
+        msg: >-
+          {{ test_results | selectattr('status','eq','PASS') | list | length }} PASS,
+          {{ test_results | selectattr('status','eq','PARTIAL') | list | length }} PARTIAL,
+          {{ test_results | selectattr('status','eq','SKIP') | list | length }} SKIP (missing from API),
+          {{ test_results | selectattr('status','eq','BUG') | list | length }} BUG (report to Nagios),
+          {{ test_results | selectattr('status','eq','FAIL') | list | length }} FAIL
+          -> report at {{ playbook_dir }}/nagios_cs_test_report.md
+
+    - name: Fail the run if any test failed
+      ansible.builtin.assert:
+        that:
+          - test_results | selectattr('status', 'eq', 'FAIL') | list | length == 0
+        fail_msg: "One or more tests FAILED - see nagios_cs_test_report.md (BUG entries are Nagios API defects to report upstream, not suite failures)"

@@ -1,0 +1,54 @@
+{#
+  Copyright (c) 2026, Chris Story <chris.story@effility.org>
+  GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+  SPDX-License-Identifier: GPL-3.0-or-later
+#}
+# Nagios XI collection - test run report
+
+- Target: {{ nagios_url }}
+- Generated: {{ now(utc=true).strftime('%Y-%m-%d %H:%M:%S') }} UTC
+- Inventory: 100 simulated devices (127.0.1.1 - 127.0.1.100)
+
+| Result | Count |
+|---|---|
+| PASS | {{ test_results | selectattr('status', 'eq', 'PASS') | list | length }} |
+| PARTIAL | {{ test_results | selectattr('status', 'eq', 'PARTIAL') | list | length }} |
+| SKIP (missing from API) | {{ test_results | selectattr('status', 'eq', 'SKIP') | list | length }} |
+| BUG (report to Nagios) | {{ test_results | selectattr('status', 'eq', 'BUG') | list | length }} |
+| FAIL | {{ test_results | selectattr('status', 'eq', 'FAIL') | list | length }} |
+
+| ID | Test | Status | Note |
+|---|---|---|---|
+{% for r in test_results %}
+| {{ r.id }} | {{ r.name }} | {{ r.status }} | {{ r.note | replace('\n', ' ') | truncate(160) }} |
+{% endfor %}
+{% set bugs = test_results | selectattr('status', 'eq', 'BUG') | list %}
+{% if bugs %}
+
+## API anomalies - report these to Nagios
+
+Per project policy, defects in the Nagios XI API are surfaced by the
+collection and this suite rather than worked around. Each entry below is a
+candidate bug report; the note contains the endpoint, the observed behavior,
+and the raw evidence.
+
+{% for r in bugs %}
+### {{ r.id }} - {{ r.name }}
+
+{{ r.note }}
+
+{% endfor %}
+{% endif %}
+{% set gaps = test_results | selectattr('status', 'eq', 'SKIP') | list %}
+{% if gaps %}
+
+## Endpoints missing from this XI release
+
+These API functions are documented/expected but absent on the tested server
+("Unknown API endpoint"). Worth raising with Nagios as feature gaps or
+documentation issues.
+
+{% for r in gaps %}
+- **{{ r.id }}** {{ r.name }}
+{% endfor %}
+{% endif %}

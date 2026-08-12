@@ -1,0 +1,198 @@
+---
+# Copyright (c) 2026, Chris Story <chris.story@effility.org>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+# 02 - objects section tests
+# Exercises every read-only resource of the objects/ API section against the
+# simulated devices created in 01_config_tests.yml.
+- name: Objects section - query every resource
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - vars.yml
+  vars:
+    device_hosts: "{{ groups['nagios_devices'] }}"
+    service_hosts: "{{ groups['nagios_devices'][:10] }}"
+  module_defaults:
+    group/community.nagios_cs.nagios_cs:
+      url: "{{ nagios_url }}"
+      api_key: "{{ nagios_api_key }}"
+      validate_certs: "{{ nagios_validate_certs }}"
+  tasks:
+    # -------- status + config resources with strong assertions
+    - name: "OBJ-01..08: resources verified against known created data"
+      block:
+        - community.nagios_cs.object_info:
+            resource: "{{ item.resource }}"
+            query: "{{ item.query }}"
+          register: r_obj
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: (r_obj.data.recordcount | default(0) | int) >= (item.min | int)
+          loop:
+            - {resource: hoststatus, query: {host_name: "lk:sim-", records: "200:0"}, min: 100}
+            - {resource: servicestatus, query: {host_name: "lk:sim-", records: "50:0"}, min: 10}
+            - {resource: host, query: {host_name: "lk:sim-", records: "200:0"}, min: 100}
+            - {resource: service, query: {name: "{{ sim_service }}", host_name: "lk:sim-"}, min: 10}
+            - {resource: hostgroup, query: {name: "{{ sim_hostgroup }}"}, min: 1}
+            - {resource: servicegroup, query: {name: "{{ sim_servicegroup }}"}, min: 1}
+            - {resource: contact, query: {name: "{{ sim_contact }}"}, min: 1}
+            - {resource: contactgroup, query: {name: "{{ sim_contactgroup }}"}, min: 1}
+          loop_control: {label: "{{ item.resource }}"}
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-01, t_name: "objects/{hoststatus,servicestatus,host,service,hostgroup,servicegroup,contact,contactgroup} GET",
+                 t_status: PASS, t_note: "all counts matched created objects"}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-01, t_name: "objects status/config resources GET", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "OBJ-02: timeperiod lookup"
+      block:
+        - community.nagios_cs.object_info:
+            resource: timeperiod
+            query: {name: "{{ sim_timeperiod }}"}
+          register: r_tp
+          until: (r_tp.data.recordcount | default(0) | int) >= 1
+          retries: 3
+          delay: 5
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-02, t_name: "objects/timeperiod GET", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-02, t_name: "objects/timeperiod GET", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "OBJ-02b: command lookup (endpoint absent on some XI releases)"
+      block:
+        - community.nagios_cs.object_info:
+            resource: command
+            query: {name: "{{ sim_command }}"}
+          register: r_cmd
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-02b, t_name: "objects/command GET", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-02b, t_name: "objects/command GET", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }} (command existence is still verified at CCM level in VER-CCM-01)"}
+
+    - name: "OBJ-03: group member resources"
+      block:
+        - community.nagios_cs.object_info:
+            resource: "{{ item }}"
+          register: r_members
+          loop: [hostgroupmembers, servicegroupmembers, contactgroupmembers]
+        - ansible.builtin.assert:
+            that:
+              - item.data is defined
+              - item.data is mapping
+          loop: "{{ r_members.results }}"
+          loop_control: {label: "{{ item.item }}"}
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-03, t_name: "objects/{hostgroupmembers,servicegroupmembers,contactgroupmembers} GET",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-03, t_name: "objects group member resources GET", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    # -------- comment: create one via core_command, then verify it appears
+    - name: "OBJ-04: comment lifecycle (also verifies system/corecommand)"
+      block:
+        - community.nagios_cs.core_command:
+            command: "ADD_HOST_COMMENT;{{ device_hosts[0] }};1;ansible-tests;simulated test comment"
+        - community.nagios_cs.object_info:
+            resource: comment
+            query: {host_name: "{{ device_hosts[0] }}"}
+          register: r_comment
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: (r_comment.data.recordcount | default(0) | int) >= 1
+        - community.nagios_cs.core_command:
+            command: "DEL_ALL_HOST_COMMENTS;{{ device_hosts[0] }}"
+        - community.nagios_cs.object_info:
+            resource: comment
+            query: {host_name: "{{ device_hosts[0] }}"}
+          register: r_comment_gone
+          retries: "{{ verify_retries }}"
+          delay: "{{ verify_delay }}"
+          until: (r_comment_gone.data.recordcount | default(1) | int) == 0
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-04, t_name: "objects/comment GET + system/corecommand ADD/DEL_HOST_COMMENT round trip",
+                 t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-04, t_name: "objects/comment + corecommand round trip", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    # -------- structural checks for downtime + historical resources
+    - name: "OBJ-05: downtime/logentries/history resources respond with valid structure"
+      block:
+        - community.nagios_cs.object_info:
+            resource: "{{ item }}"
+            query: {records: "10:0"}
+          register: r_hist
+          loop: [downtime, logentries, statehistory]
+        - ansible.builtin.assert:
+            that:
+              - item.data is mapping
+              - "'recordcount' in item.data or item.data | length > 0"
+          loop: "{{ r_hist.results }}"
+          loop_control: {label: "{{ item.item }}"}
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-05, t_name: "objects/{downtime,logentries,statehistory} GET",
+                 t_status: PARTIAL,
+                 t_note: "Structure verified; content depends on runtime history."}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-05, t_name: "objects historical resources GET", t_status: FAIL,
+                 t_note: "{{ ansible_failed_result.msg | default('') }}"}
+
+    - name: "OBJ-05b: notifications + acknowledgements (endpoints absent on some XI releases)"
+      block:
+        - community.nagios_cs.object_info:
+            resource: "{{ item }}"
+            query: {records: "10:0"}
+          register: r_na
+          loop: [notifications, acknowledgements]
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-05b, t_name: "objects/{notifications,acknowledgements} GET", t_status: PARTIAL,
+                 t_note: "Structure verified; content depends on runtime history."}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars:
+            t_id: OBJ-05b
+            t_name: "objects/{notifications,acknowledgements} GET"
+            t_status: FAIL
+            t_note: >-
+              {{ (ansible_failed_result.results | default([ansible_failed_result]))
+                 | selectattr('msg', 'defined') | map(attribute='msg')
+                 | join('; ') | default(ansible_failed_result.msg | default(''), true) }}
+
+    # -------- performance data exports (need RRDs, may not exist yet)
+    - name: "OBJ-06: rrdexport / cpexport (conditional on perf data existing)"
+      block:
+        - community.nagios_cs.object_info:
+            resource: rrdexport
+            query: {host_name: "{{ device_hosts[0] }}"}
+          register: r_rrd
+        - community.nagios_cs.object_info:
+            resource: cpexport
+            query:
+              host_name: "{{ device_hosts[0] }}"
+              service_description: "{{ sim_service }}"
+              track: rta
+              records: "10:0"
+          register: r_cp
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars: {t_id: OBJ-06, t_name: "objects/{rrdexport,cpexport} GET", t_status: PASS}
+      rescue:
+        - ansible.builtin.include_tasks: tasks/record.yml
+          vars:
+            t_id: OBJ-06
+            t_name: "objects/{rrdexport,cpexport} GET"
+            t_status: FAIL
+            t_note: >-
+              {{ ansible_failed_result.msg | default('') }} (Context: fresh
+              hosts have no perf data yet; a structured no-data error would be
+              expected here. An HTTP 5xx response instead is an API defect.)

@@ -1,0 +1,16 @@
+---
+# Copyright (c) 2026, Chris Story <chris.story@effility.org>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Install the collection under test. Pick one:
+#
+# From a checkout of this repo (build first):
+#   ansible-galaxy collection build .. --force
+#   ansible-galaxy collection install ../community-nagios_cs-*.tar.gz --force
+#
+# Straight from GitHub:
+#   ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: git+https://github.com/ansible-collections/community.nagios_cs.git
+    type: git
+    version: main

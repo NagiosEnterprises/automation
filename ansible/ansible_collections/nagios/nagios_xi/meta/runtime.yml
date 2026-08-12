@@ -1,2 +1,30 @@
 ---
-requires_ansible: '>=2.16.0'  # Use '>=2.9.10' instead, if needed
+# Copyright (c) 2026, Chris Story <chris.story@effility.org>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+requires_ansible: '>=2.14.0'
+action_groups:
+  nagios_cs:
+    - object_info
+    - host
+    - service
+    - hostgroup
+    - servicegroup
+    - contact
+    - contactgroup
+    - timeperiod
+    - command
+    - hostescalation
+    - serviceescalation
+    - hostdependency
+    - servicedependency
+    - apply_config
+    - system_info
+    - system_status
+    - user
+    - user_info
+    - auth_token
+    - core_command
+    - scheduled_downtime
+    - mass_acknowledge
+    - mass_immediate_check

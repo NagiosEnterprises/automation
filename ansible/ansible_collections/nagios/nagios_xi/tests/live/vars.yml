@@ -1,0 +1,24 @@
+---
+# Copyright (c) 2026, Chris Story <chris.story@effility.org>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Connection settings for the Nagios XI server under test.
+# Override on the CLI:  -e nagios_url=... -e nagios_api_key=...
+nagios_url: "{{ lookup('env', 'NAGIOS_URL') | default('https://nagios.example.com', true) }}"
+nagios_api_key: "{{ lookup('env', 'NAGIOS_API_KEY') | default('CHANGE_ME', true) }}"
+nagios_validate_certs: false
+
+# How long to keep retrying object queries after an applyconfig
+# (the engine restart + status export takes a little while).
+verify_retries: 12
+verify_delay: 10
+
+# Test object names (all prefixed sim- / sim_ so cleanup is safe)
+sim_command: check_sim_ping
+sim_timeperiod: sim-business-hours
+sim_contact: sim-contact
+sim_contactgroup: sim-oncall
+sim_hostgroup: sim-all-devices
+sim_servicegroup: sim-ping-checks
+sim_service: PING
+sim_user: sim-tester

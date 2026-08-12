@@ -2,10 +2,11 @@
 
 namespace: nagios
 name: nagios_xi
-version: 0.1.1
+version: 0.1.2
 readme: README.md
 authors:
-  - Michael Bellerue (github.com/MikeBellerue-Nagios)
+  - Michael Bellerue (github.com/MikeBellerue-Nagios) (github.com/HunnyPuns)
+  - Chris Story (github.com/nbkhwjm)
 description: A collection of Ansible tools designed for use with Nagios XI.
 license_file: LICENSE
 tags:
@@ -16,4 +17,14 @@ repository: https://github.com/NagiosEnterprises/automation
 homepage: https://github.com/NagiosEnterprises/automation
 issues: https://github.com/NagiosEnterprises/automation/issues
 build_ignore:
+  - '*.tar.gz'
+  - '**/__pycache__'
+  - .github
   - .gitignore
+  - .yamllint
+  - tests
+  - docs
+  - changelogs
+  - CHANGELOG.md
+  - CONTRIBUTING.md
+  - Makefile
