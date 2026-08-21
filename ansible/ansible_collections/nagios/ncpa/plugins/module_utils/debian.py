@@ -3,7 +3,8 @@ from ansible_collections.nagios.ncpa.plugins.module_utils.ncpa_common import (
     detect_architecture,
     is_ncpa_installed,
     ensure_file,
-    get_gpg_keys
+    get_gpg_keys,
+    download_file
 )
 
 def build_deb_sources(repo_url, keyring):
@@ -13,19 +14,31 @@ URIs: {repo_url}
 Suites: /
 Signed-By: {keyring}"""
 
+def map_deb_architecture(architecture):
+    deb_arch_map = {
+        "x86_64": "amd64",
+        "amd64": "amd64",
+        "aarch64": "arm64",
+        "arm64": "arm64",
+        "i386": "i386",
+        "i686": "i386",
+    }
+    return deb_arch_map.get(architecture, architecture)
+
 def build_deb_url(version, architecture):
     base_url = "https://assets.nagios.com/downloads/ncpa3"
+    architecture = map_deb_architecture(architecture)
 
     if version in [None, "", "latest"]:
         filename = f"ncpa-latest-1.{architecture}.deb"
     else:
         filename = f"ncpa-{version}-1.{architecture}.deb"
-    
+
     return f"{base_url}/{filename}"
 
 def remove_ncpa(module,paths):
     rc, stdout, stderr = module.run_command(
-        [paths["apt-get"], "remove", "-y", "ncpa"]
+        [paths["apt"], "remove", "-y", "ncpa"]
     )
 
     if rc != 0:
@@ -34,7 +47,7 @@ def remove_ncpa(module,paths):
             "msg": "Ran into error",
             "stderr": stderr
         }
-    
+
     return rc == 0
 
 def install_deb_prereqs(module):
@@ -48,7 +61,7 @@ def install_deb_prereqs(module):
             "msg": "ERROR: Failed to install gpg and apt-transport-https",
             "stderr": stderr
         }
-    
+
 def remove_deb_repo(module,paths):
     rc, stdout, stderr = module.run_command(
         [paths["apt"], "remove", "-y", "nagios-repo"]
@@ -69,10 +82,16 @@ def handle_deb(module):
         "apt": module.get_bin_path("apt-get")
     }
 
+    if not paths["apt"]:
+        return {
+            "changed": False,
+            "msg": "ERROR: apt-get was not found on this host."
+        }
+
     installed = is_ncpa_installed(module, paths["apt"])
 
     if module.params.get("state") == "present":
-        
+
         if module.check_mode is True:
             if installed is True:
                 return {
@@ -84,7 +103,7 @@ def handle_deb(module):
                     "changed": True,
                     "msg": "NCPA is not installed, it would be installed."
                 }
-        
+
         version = module.params.get("version")
         architecture = detect_architecture(module)
 
@@ -99,12 +118,22 @@ def handle_deb(module):
                     "changed": changed,
                     "msg": "ERROR: Failed to build URL"
                 }
-            
+
+            tmp_deb = "/tmp/ncpa.deb"
+            try:
+                download_file(url, tmp_deb)
+            except Exception as e:
+                return {
+                    "changed": changed,
+                    "msg": "ERROR: Failed to download NCPA package from {0}".format(url),
+                    "stderr": str(e)
+                }
+
             cmd = [
                 paths["apt"],
                 "-y",
                 "install",
-                url
+                tmp_deb
             ]
 
             rc, stdout, stderr = module.run_command(cmd)
@@ -115,22 +144,22 @@ def handle_deb(module):
                     "msg": "ERROR: Failed to install NCPA",
                     "stderr": stderr
                 }
-            
+
             changed = True
 
             return {
                 "changed": changed,
                 "msg": "NCPA installed successfully"
             }
-        
+
         elif module.params.get("package_source") == "repository":
-        
+
             os_release = parse_os_release()
 
             repo_url = (
                 "https://repo.nagios.com/deb/{}".format(os_release["VERSION_CODENAME"])
             )
-            
+
             desired_content = build_deb_sources(repo_url, "/usr/share/keyrings/nagios.gpg")
 
             changed = ensure_file(module,"/etc/apt/sources.list.d/nagios.sources", desired_content)
@@ -140,7 +169,7 @@ def handle_deb(module):
             desired_content = get_gpg_keys()
 
             changed = ensure_file(module, "/tmp/GPG-KEY-NAGIOS-V3", "{}".format(desired_content["v3"]))
-            
+
             if changed is True:
 
                 # Properly install GPG key
@@ -154,7 +183,7 @@ def handle_deb(module):
                         "msg": "ERROR: Failed to --dearmor Nagios GPG key",
                         "stderr": stderr
                     }
-            
+
             # Update repo
             rc, stdout, stderr = module.run_command(
                 ["apt-get", "update"]
@@ -171,22 +200,22 @@ def handle_deb(module):
                     "msg": "ERROR: Failed to install NCPA",
                     "stderr": stderr
                 }
-            
+
             changed = True
 
             return {
                 "changed": changed,
                 "msg": "Nagios repository, and NCPA installed successfully."
             }
-    
+
         else:
             return {
                 "changed": False,
                 "msg": f"ERROR: Unknown package_source {module.params.get('package_source')}"
             }
-    
+
     elif module.params.get("state") == "absent":
-        
+
         if module.check_mode:
             if installed is False:
                 return {
@@ -198,7 +227,7 @@ def handle_deb(module):
                     "changed": True,
                     "msg": "NCPA is installed, it would be uninstalled."
                 }
-            
+
         if remove_ncpa(module,paths):
             return {
                 "changed": True,
@@ -209,10 +238,9 @@ def handle_deb(module):
                 "changed": False,
                 "msg": "ERROR: Failed to uninstall NCPA"
             }
-    
+
     else:
         return {
             "changed": False,
             "msg": f"ERROR: Unknown state type: {module.params.get('state')}"
         }
-

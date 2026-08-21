@@ -1,7 +1,7 @@
-
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.nagios.ncpa.plugins.module_utils.ncpa_common import (
-   parse_os_release
+   parse_os_release,
+   detect_pkg_family
 )
 from ansible_collections.nagios.ncpa.plugins.module_utils.rhel import (
     handle_rhel
@@ -18,6 +18,7 @@ short_description: Install and manage Nagios Cross Platform Agent (NCPA)
 
 description:
   - Installs and manages NCPA on supported operating systems.
+  - Supports Red Hat, CentOS, Oracle Linux, Debian, and Ubuntu.
 
 options:
 
@@ -69,7 +70,7 @@ changed:
 '''
 
 def main():
-    
+
     module = AnsibleModule(
         argument_spec=dict(
             state=dict(type='str', default='present', choices=['present', 'absent']),
@@ -80,17 +81,27 @@ def main():
         supports_check_mode=True
     )
 
-    result = ""
+    try:
+        host_info = parse_os_release()
+    except OSError as e:
+        module.fail_json(msg="Unable to read /etc/os-release: {0}".format(e))
 
-    host_info = parse_os_release()
+    pkg_family = detect_pkg_family(host_info)
 
-    
-    if "debian" in host_info["ID"]:
-      result = handle_deb(module)
-    elif "centos" in host_info["ID"]:
-      result = handle_rhel(module)
+    if pkg_family == "debian":
+        result = handle_deb(module)
+    elif pkg_family == "rhel":
+        result = handle_rhel(module)
+    else:
+        distro = host_info.get("PRETTY_NAME") or host_info.get("ID") or "unknown"
+        module.fail_json(
+            msg=(
+                "Unsupported operating system: {0}. "
+                "nagios.ncpa supports Red Hat, CentOS, Oracle Linux, Debian, and Ubuntu."
+            ).format(distro)
+        )
 
     module.exit_json(**result)
 
 if __name__ == "__main__":
-    main()
+    main() 

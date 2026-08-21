@@ -1,9 +1,9 @@
-
 from ansible_collections.nagios.ncpa.plugins.module_utils.ncpa_common import (
     parse_os_release,
     detect_architecture,
     is_ncpa_installed,
-    is_nagios_repo_installed
+    is_nagios_repo_installed,
+    get_os_major_version
 )
 
 def build_rpm_url(version, major_release, architecture):
@@ -13,7 +13,7 @@ def build_rpm_url(version, major_release, architecture):
         filename = f"ncpa-latest-1.{architecture}.rpm"
     else:
         filename = f"ncpa-{version}-1.el{major_release}.{architecture}.rpm"
-    
+
     return f"{base_url}/{filename}"
 
 def remove_ncpa(module,paths):
@@ -40,15 +40,22 @@ def remove_rhel_repo(module,paths):
 
 def handle_rhel(module):
     changed = False
+    pkg_mgr = module.get_bin_path("dnf") or module.get_bin_path("yum")
     paths = {
-        "rpm": module.get_bin_path("rpm"),
-        "dnf": module.get_bin_path("dnf")
+        "rpm": module.get_bin_path("rpm") or "rpm",
+        "dnf": pkg_mgr
     }
+
+    if not pkg_mgr:
+        return {
+            "changed": False,
+            "msg": "ERROR: Neither dnf nor yum was found on this host."
+        }
 
     installed = is_ncpa_installed(module,paths["rpm"])
 
     if module.params.get("state") == "present":
-        
+
         if module.check_mode:
             if installed is True:
                 return {
@@ -63,13 +70,14 @@ def handle_rhel(module):
 
 
         version = module.params.get("version")
-        major_release = parse_os_release()
+        os_release = parse_os_release()
+        major_release = get_os_major_version(os_release)
         architecture = detect_architecture(module)
-        
+
         if module.params.get("package_source") == "package":
             url = build_rpm_url(
                 version,
-                major_release["VERSION"],
+                major_release,
                 architecture
             )
 
@@ -102,34 +110,47 @@ def handle_rhel(module):
                 "msg":"NCPA installed successfully"
             }
         elif module.params.get("package_source") == "repository":
-            
-            os_release = parse_os_release()
+
             repo_dash_map = {
                 "8": 2,
                 "9": 2,
                 "10": 1
             }
-            repo_dash_num = repo_dash_map[os_release['VERSION_ID']]
+            repo_dash_num = repo_dash_map.get(major_release)
+            if repo_dash_num is None:
+                return {
+                    "changed": False,
+                    "msg": (
+                        "ERROR: Unsupported Enterprise Linux version {0}. "
+                        "Supported: 8, 9, 10."
+                    ).format(major_release)
+                }
 
             repo_url = (
                 f"https://repo.nagios.com/nagios/"
-                f"{os_release['VERSION_ID']}/"
-                f"nagios-repo-{os_release['VERSION_ID']}"
-                f"-{repo_dash_num}.el{os_release['VERSION_ID']}.noarch.rpm"
+                f"{major_release}/"
+                f"nagios-repo-{major_release}"
+                f"-{repo_dash_num}.el{major_release}.noarch.rpm"
             )
 
             if not is_nagios_repo_installed(module,paths):
-                return {
-                    "changed": changed,
-                    "msg": f"Failed to install the nagios-repo rpm, URL {repo_url}"
-                }
+                rc, stdout, stderr = module.run_command(
+                    [paths["dnf"], "install", "-y", repo_url]
+                )
+                if rc != 0:
+                    return {
+                        "changed": changed,
+                        "msg": f"Failed to install the nagios-repo rpm, URL {repo_url}",
+                        "stderr": stderr
+                    }
+                changed = True
 
             if is_ncpa_installed(module,paths["rpm"]):
                 return {
                     "changed": changed,
                     "msg": "NCPA is already installed"
                 }
-            
+
             rc, stdout, stderr = module.run_command(
                 [paths["rpm"], "--import", "https://repo.nagios.com/GPG-KEY-NAGIOS-V2"]
             )
@@ -140,7 +161,7 @@ def handle_rhel(module):
                     "msg": "ERROR: Failed to add Nagios repo key V2",
                     "stderr": stderr
                 }
-            
+
             rc = ""
             stdout = ""
             stderr = ""
@@ -148,14 +169,14 @@ def handle_rhel(module):
             rc, stdout, stderr = module.run_command(
                 [paths["rpm"], "--import", "https://repo.nagios.com/GPG-KEY-NAGIOS-V3"]
             )
-                
+
             if rc != 0:
                 return {
                     "changed": changed,
                     "msg": "ERROR: Failed to add Nagios repo key v3",
                     "stderr": stderr
                 }
-            
+
             rc = ""
             stdout = ""
             stderr = ""
@@ -192,7 +213,7 @@ def handle_rhel(module):
                 "changed": changed,
                 "msg": "Nagios repository, and NCPA installed successfully."
             }
-        
+
         else:
             return {
                 "changed": False,
@@ -200,7 +221,7 @@ def handle_rhel(module):
             }
 
     elif module.params.get("state") == "absent":
-        
+
         if module.check_mode:
             if installed is False:
                 # Exit saying NCPA is not installed, no changes would be made.
@@ -213,7 +234,7 @@ def handle_rhel(module):
                     "changed": True,
                     "msg": "NCPA is installed, it would be uninstalled"
                 }
-        
+
         if remove_ncpa(module,paths):
             return {
                 "changed": True,
@@ -224,11 +245,10 @@ def handle_rhel(module):
                 "changed": False,
                 "msg": "ERROR: Failed to uninstall NCPA"
             }
-        
+
 
     else:
         return {
             "changed": False,
             "msg": f"ERROR: Unknown state type: {module.params.get('state')}"
         }
-
