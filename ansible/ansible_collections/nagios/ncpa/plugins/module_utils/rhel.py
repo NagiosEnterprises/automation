@@ -1,7 +1,8 @@
 from ansible_collections.nagios.ncpa.plugins.module_utils.ncpa_common import (
     parse_os_release,
     detect_architecture,
-    is_ncpa_installed,
+    get_installed_ncpa_version,
+    version_satisfied,
     is_nagios_repo_installed,
     get_os_major_version
 )
@@ -17,18 +18,9 @@ def build_rpm_url(version, major_release, architecture):
     return f"{base_url}/{filename}"
 
 def remove_ncpa(module,paths):
-    rc, stdout, stderr = module.run_command(
+    return module.run_command(
         [paths["dnf"], "remove", "-y", "ncpa"]
     )
-
-    if rc != 0:
-        return {
-            "changed": False,
-            "msg": "Ran into error",
-            "stderr": stderr
-        }
-
-    return rc == 0
 
 def remove_rhel_repo(module,paths):
     rc = module.run_command(
@@ -48,33 +40,45 @@ def handle_rhel(module):
 
     if not pkg_mgr:
         return {
+            "failed": True,
             "changed": False,
             "msg": "ERROR: Neither dnf nor yum was found on this host."
         }
 
-    installed = is_ncpa_installed(module,paths["rpm"])
+    version = module.params.get("version")
+    package_source = module.params.get("package_source")
+    installed_version = get_installed_ncpa_version(module, paths)
+    satisfied = version_satisfied(installed_version, version)
 
     if module.params.get("state") == "present":
 
         if module.check_mode:
-            if installed is True:
-                return {
-                    "changed": False,
-                    "msg": "NCPA is already installed, no changes would be made."
-                }
-            else:
-                return {
-                    "changed": True,
-                    "msg": "NCPA is not installed, it would be installed"
-                }
+            would_change = not satisfied
+            if package_source == "repository" and not is_nagios_repo_installed(module, paths):
+                would_change = True
+            return {
+                "changed": would_change,
+                "msg": (
+                    "NCPA would be installed or changed."
+                    if would_change else
+                    "NCPA {0} is already installed, no changes would be made.".format(installed_version)
+                ),
+                "installed_version": installed_version
+            }
 
-
-        version = module.params.get("version")
         os_release = parse_os_release()
         major_release = get_os_major_version(os_release)
         architecture = detect_architecture(module)
 
-        if module.params.get("package_source") == "package":
+        if package_source == "package":
+
+            if satisfied:
+                return {
+                    "changed": False,
+                    "msg": "NCPA {0} is already installed".format(installed_version),
+                    "installed_version": installed_version
+                }
+
             url = build_rpm_url(
                 version,
                 major_release,
@@ -83,6 +87,7 @@ def handle_rhel(module):
 
             if not url:
                 return {
+                    "failed": True,
                     "changed": changed,
                     "msg": "ERROR: Failed to build URL"
                 }
@@ -98,18 +103,32 @@ def handle_rhel(module):
 
             if rc != 0:
                 return {
+                    "failed": True,
                     "changed": changed,
                     "msg": "ERROR: Failed to install NCPA",
                     "stderr": stderr
                 }
 
-            changed = True
+            new_version = get_installed_ncpa_version(module, paths)
+
+            if not version_satisfied(new_version, version):
+                return {
+                    "failed": True,
+                    "changed": new_version != installed_version,
+                    "msg": (
+                        "ERROR: dnf reported success, but the installed NCPA "
+                        "version is {0} (requested {1})"
+                    ).format(new_version, version or "latest"),
+                    "installed_version": new_version
+                }
 
             return {
-                "changed": changed,
-                "msg":"NCPA installed successfully"
+                "changed": new_version != installed_version,
+                "msg": "NCPA installed successfully",
+                "installed_version": new_version
             }
-        elif module.params.get("package_source") == "repository":
+
+        elif package_source == "repository":
 
             repo_dash_map = {
                 "8": 2,
@@ -119,6 +138,7 @@ def handle_rhel(module):
             repo_dash_num = repo_dash_map.get(major_release)
             if repo_dash_num is None:
                 return {
+                    "failed": True,
                     "changed": False,
                     "msg": (
                         "ERROR: Unsupported Enterprise Linux version {0}. "
@@ -139,16 +159,18 @@ def handle_rhel(module):
                 )
                 if rc != 0:
                     return {
+                        "failed": True,
                         "changed": changed,
-                        "msg": f"Failed to install the nagios-repo rpm, URL {repo_url}",
+                        "msg": f"ERROR: Failed to install the nagios-repo rpm, URL {repo_url}",
                         "stderr": stderr
                     }
                 changed = True
 
-            if is_ncpa_installed(module,paths["rpm"]):
+            if satisfied:
                 return {
                     "changed": changed,
-                    "msg": "NCPA is already installed"
+                    "msg": "NCPA {0} is already installed".format(installed_version),
+                    "installed_version": installed_version
                 }
 
             rc, stdout, stderr = module.run_command(
@@ -157,14 +179,11 @@ def handle_rhel(module):
 
             if rc != 0:
                 return {
+                    "failed": True,
                     "changed": changed,
                     "msg": "ERROR: Failed to add Nagios repo key V2",
                     "stderr": stderr
                 }
-
-            rc = ""
-            stdout = ""
-            stderr = ""
 
             rc, stdout, stderr = module.run_command(
                 [paths["rpm"], "--import", "https://repo.nagios.com/GPG-KEY-NAGIOS-V3"]
@@ -172,14 +191,11 @@ def handle_rhel(module):
 
             if rc != 0:
                 return {
+                    "failed": True,
                     "changed": changed,
                     "msg": "ERROR: Failed to add Nagios repo key v3",
                     "stderr": stderr
                 }
-
-            rc = ""
-            stdout = ""
-            stderr = ""
 
             rc, stdout, stderr = module.run_command(
                 [paths["dnf"], "install", "-y", "ncpa"]
@@ -187,14 +203,19 @@ def handle_rhel(module):
 
             if rc != 0:
                 return {
+                    "failed": True,
                     "changed": changed,
-                    "msg": "Failed to install NCPA",
+                    "msg": "ERROR: Failed to install NCPA",
                     "stderr": stderr
                 }
 
-            rc = ""
-            stdout = ""
-            stderr = ""
+            new_version = get_installed_ncpa_version(module, paths)
+            if new_version is None:
+                return {
+                    "failed": True,
+                    "changed": changed,
+                    "msg": "ERROR: dnf reported success, but NCPA is not installed"
+                }
 
             rc, stdout, stderr = module.run_command(
                 ["systemctl", "enable", "ncpa"]
@@ -202,53 +223,57 @@ def handle_rhel(module):
 
             if rc != 0:
                 return {
-                    "changed": changed,
-                    "msg": "Failed to set NCPA to start on boot",
+                    "failed": True,
+                    "changed": True,
+                    "msg": "ERROR: NCPA installed, but failed to set it to start on boot",
                     "stderr": stderr
                 }
 
-            changed = True
-
             return {
-                "changed": changed,
-                "msg": "Nagios repository, and NCPA installed successfully."
+                "changed": True,
+                "msg": "Nagios repository, and NCPA installed successfully.",
+                "installed_version": new_version
             }
 
         else:
             return {
+                "failed": True,
                 "changed": False,
-                "msg": f"ERROR: Unknown package_source {module.params.get('package_source')}"
+                "msg": f"ERROR: Unknown package_source {package_source}"
             }
 
     elif module.params.get("state") == "absent":
 
-        if module.check_mode:
-            if installed is False:
-                # Exit saying NCPA is not installed, no changes would be made.
-                return {
-                    "changed": False,
-                    "msg": "NCPA is not installed, no changes would be made."
-                }
-            else:
-                return {
-                    "changed": True,
-                    "msg": "NCPA is installed, it would be uninstalled"
-                }
-
-        if remove_ncpa(module,paths):
-            return {
-                "changed": True,
-                "msg": "Uninstalled NCPA"
-            }
-        else:
+        if installed_version is None:
             return {
                 "changed": False,
-                "msg": "ERROR: Failed to uninstall NCPA"
+                "msg": "NCPA is not installed, no changes needed."
             }
 
+        if module.check_mode:
+            return {
+                "changed": True,
+                "msg": "NCPA {0} is installed, it would be uninstalled".format(installed_version)
+            }
+
+        rc, stdout, stderr = remove_ncpa(module,paths)
+
+        if rc != 0 or get_installed_ncpa_version(module, paths) is not None:
+            return {
+                "failed": True,
+                "changed": False,
+                "msg": "ERROR: Failed to uninstall NCPA",
+                "stderr": stderr
+            }
+
+        return {
+            "changed": True,
+            "msg": "Uninstalled NCPA"
+        }
 
     else:
         return {
+            "failed": True,
             "changed": False,
             "msg": f"ERROR: Unknown state type: {module.params.get('state')}"
         }

@@ -10,22 +10,50 @@ DEBIAN_IDS = {"debian", "ubuntu"}
 RHEL_IDS = {"rhel", "centos", "ol", "oracle", "rocky", "almalinux", "fedora"}
 RHEL_ID_LIKE = {"rhel", "centos", "fedora"}
 
-def is_ncpa_installed(module,path):
-    rc = False
+def get_installed_ncpa_version(module, paths):
+    """Return the installed NCPA version (e.g. '3.1.1'), or None if not installed.
 
-    if path == "rpm":
-        rc = module.run_command(
-            [path["rpm"], "-q", "ncpa"]
+    paths is the handler's paths dict. RHEL handlers supply "rpm",
+    Debian handlers supply "dpkg_query".
+    """
+    if paths.get("rpm"):
+        rc, stdout, stderr = module.run_command(
+            [paths["rpm"], "-q", "--queryformat", "%{VERSION}", "ncpa"]
         )
-    elif path == "apt":
-        rc = module.run_command(
-            [path["apt"], "-q", "ncpa"]
-        )
+        if rc != 0:
+            return None
+        return stdout.strip() or None
 
-    if rc == 0:
+    if paths.get("dpkg_query"):
+        rc, stdout, stderr = module.run_command(
+            [paths["dpkg_query"], "-W", "-f", "${Status}\t${Version}", "ncpa"]
+        )
+        if rc != 0:
+            return None
+        status, _, version = stdout.partition("\t")
+        # "install ok installed" / "hold ok installed" mean installed;
+        # "deinstall ok config-files" (removed, config left) does not.
+        if status.split()[-1:] != ["installed"]:
+            return None
+        return version.strip() or None
+
+    return None
+
+def is_ncpa_installed(module, paths):
+    return get_installed_ncpa_version(module, paths) is not None
+
+def version_satisfied(installed_version, requested_version):
+    """True when the installed package already meets the request.
+
+    No version (or "latest") is satisfied by any installed version; the
+    module does not upgrade an existing install to latest. A specific version
+    is compared on the upstream part only, so "3.1.1" matches "3.1.1-1".
+    """
+    if installed_version is None:
         return False
-    else:
+    if requested_version in [None, "", "latest"]:
         return True
+    return installed_version.split("-")[0] == requested_version.split("-")[0]
 
 def parse_os_release():
 
@@ -98,12 +126,6 @@ def is_nagios_repo_installed(module, paths):
         )
 
     return False
-
-def get_install_ncpa_version(module,path):
-    return {
-        "changed": False,
-        "msg": f"ERROR: get_install_ncpa_version() not implemented yet."
-    }
 
 def ensure_file(module,file_path,desired_content):
     current = None

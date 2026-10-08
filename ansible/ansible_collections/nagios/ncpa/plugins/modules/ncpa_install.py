@@ -101,6 +101,9 @@ def main():
             ).format(distro)
         )
 
+    if result.pop("failed", False):
+        module.fail_json(**result)
+
     module.exit_json(**result)
 
 if __name__ == "__main__":
