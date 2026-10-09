@@ -2,10 +2,11 @@
 
 namespace: nagios
 name: ncpa
-version: 0.1.2
+version: 0.1.3
 readme: README.md
 authors:
   - Michael Bellerue (github.com/MikeBellerue-Nagios)
+  - Coleman Dietsch (github.com/ne-cdietsch)
 description: A collection of Ansible tools for managing the Nagios Cross-Platform Agent
 license_file: LICENSE
 tags:

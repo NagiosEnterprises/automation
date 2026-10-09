@@ -1,0 +1,317 @@
+---
+# Lifecycle test for nagios.ncpa.ncpa_install
+#
+# DESTRUCTIVE: uninstalls NCPA (and, with ncpa_test_source=repository, the
+# Nagios repo definition) on every targeted host. Disposable test VMs only.
+#
+# Every module result is cross-checked against the package database, because
+# ncpa_install currently reports errors through exit_json (a "successful"
+# task with an ERROR msg) rather than fail_json.
+#
+# Usage:
+#   ANSIBLE_COLLECTIONS_PATH=/path/to/automation/ansible \
+#   ansible-playbook -i inventory.example.yml ncpa_deploy_test.yml \
+#     -e ncpa_test_confirm_destructive=true \
+#     -e ncpa_test_source=package          # or: repository
+#
+# Optional extra vars:
+#   ncpa_test_version=3.x.x        pin a version (package_source=package only)
+#   ncpa_test_install_requests=false   skip the python3-requests workaround
+#   ncpa_test_reset_repo=false     keep an existing Nagios repo definition
+#   NCPA_TEST_TOKEN (env)          API token; defaults to NCPA's shipped default
+
+- name: Test nagios.ncpa.ncpa_install deployment lifecycle
+  hosts: ncpa_test
+  become: true
+  gather_facts: true
+
+  vars:
+    ncpa_test_source: package
+    ncpa_test_version: ""
+    ncpa_test_install_requests: true
+    ncpa_test_reset_repo: true
+    ncpa_test_api_host: 127.0.0.1
+    ncpa_test_port: 5693
+    ncpa_test_token: "{{ lookup('ansible.builtin.env', 'NCPA_TEST_TOKEN') | default('mytoken', true) }}"
+    ncpa_test_cases:
+      - {id: t01, desc: "check-mode install on clean host reports changed, installs nothing"}
+      - {id: t02, desc: "install succeeds and reports changed"}
+      - {id: t03, desc: "ncpa package is registered in the package database"}
+      - {id: t04, desc: "ncpa systemd unit exists"}
+      - {id: t05, desc: "NCPA API answers on the listener port"}
+      - {id: t06, desc: "check-mode install when installed reports no change"}
+      - {id: t07, desc: "second install is idempotent (changed=false)"}
+      - {id: t08, desc: "state=absent removes the package"}
+      - {id: t09, desc: "second removal is idempotent (changed=false)"}
+      - {id: t10, desc: "check-mode removal when absent reports no change"}
+
+  pre_tasks:
+    - name: Refuse to run without explicit confirmation
+      ansible.builtin.assert:
+        that: ncpa_test_confirm_destructive | default(false) | bool
+        fail_msg: >-
+          This playbook uninstalls NCPA on {{ inventory_hostname }}.
+          Re-run with -e ncpa_test_confirm_destructive=true against test hosts only.
+        quiet: true
+
+    - name: Validate ncpa_test_source
+      ansible.builtin.assert:
+        that: ncpa_test_source in ['package', 'repository']
+        fail_msg: "ncpa_test_source must be 'package' or 'repository'"
+        quiet: true
+
+    - name: Skip hosts the collection does not support
+      ansible.builtin.meta: end_host
+      when: ansible_facts.os_family not in ['RedHat', 'Debian']
+
+    # Workaround: module_utils/ncpa_common.py does a top-level
+    # `from requests import get`, so every module call dies with ImportError
+    # on targets without python3-requests. Set false to test that case.
+    - name: Ensure python3-requests is present on the target
+      ansible.builtin.package:
+        name: python3-requests
+        state: present
+      when: ncpa_test_install_requests | bool
+
+    - name: Baseline - remove any existing NCPA package
+      ansible.builtin.package:
+        name: ncpa
+        state: absent
+
+    - name: Baseline - remove Nagios repo package (EL)
+      ansible.builtin.package:
+        name: nagios-repo
+        state: absent
+      when:
+        - ncpa_test_source == 'repository'
+        - ncpa_test_reset_repo | bool
+        - ansible_facts.os_family == 'RedHat'
+
+    - name: Baseline - remove Nagios apt source, keyring and cached key (Debian)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/nagios.sources
+        - /usr/share/keyrings/nagios.gpg
+        - /tmp/GPG-KEY-NAGIOS-V3
+      when:
+        - ncpa_test_source == 'repository'
+        - ncpa_test_reset_repo | bool
+        - ansible_facts.os_family == 'Debian'
+
+    - name: Baseline - read package state
+      ansible.builtin.include_tasks: PkgState.yml
+
+    - name: Baseline - confirm NCPA is not installed
+      ansible.builtin.assert:
+        that: not (ncpa_pkg_installed | bool)
+        fail_msg: Baseline cleanup failed; NCPA is still installed.
+        quiet: true
+
+  tasks:
+    # ------------------------------------------------------------ T01
+    - name: "T01 | Install in check mode"
+      nagios.ncpa.ncpa_install:
+        state: present
+        package_source: "{{ ncpa_test_source }}"
+        version: "{{ ncpa_test_version | default(omit, true) }}"
+      check_mode: true
+      register: r01
+      ignore_errors: true
+
+    - name: "T01 | Read package state"
+      ansible.builtin.include_tasks: PkgState.yml
+
+    - name: "T01 | Verify"
+      ansible.builtin.assert:
+        that:
+          - r01 is not failed
+          - r01 is changed
+          - not (ncpa_pkg_installed | bool)
+        fail_msg: "{{ r01 | to_json }}"
+      register: t01
+      ignore_errors: true
+
+    # ------------------------------------------------------------ T02/T03
+    - name: "T02 | Install"
+      nagios.ncpa.ncpa_install:
+        state: present
+        package_source: "{{ ncpa_test_source }}"
+        version: "{{ ncpa_test_version | default(omit, true) }}"
+      register: r02
+      ignore_errors: true
+
+    - name: "T02 | Verify module result"
+      ansible.builtin.assert:
+        that:
+          - r02 is not failed
+          - r02 is changed
+          - "'stderr' not in r02"
+          - r02.msg | default('') is not search('error|failed', ignorecase=true)
+        fail_msg: "{{ r02 | to_json }}"
+      register: t02
+      ignore_errors: true
+
+    - name: "T03 | Read package state"
+      ansible.builtin.include_tasks: PkgState.yml
+
+    - name: "T03 | Verify package is installed"
+      ansible.builtin.assert:
+        that: ncpa_pkg_installed | bool
+        fail_msg: ncpa is not registered in the package database after install.
+      register: t03
+      ignore_errors: true
+
+    # ------------------------------------------------------------ T04/T05
+    - name: "T04 | Gather service facts"
+      ansible.builtin.service_facts:
+
+    - name: "T04 | Verify ncpa unit exists"
+      ansible.builtin.assert:
+        that: "'ncpa.service' in ansible_facts.services"
+        fail_msg: ncpa.service not found after install.
+      register: t04
+      ignore_errors: true
+
+    # The module only enables the service on the EL repository path and never
+    # starts it, so the test starts it before probing the API.
+    - name: "T05 | Start ncpa"
+      ansible.builtin.service:
+        name: ncpa
+        state: started
+      register: r05_start
+      ignore_errors: true
+
+    - name: "T05 | Query NCPA API"
+      ansible.builtin.uri:
+        url: "https://{{ ncpa_test_api_host }}:{{ ncpa_test_port }}/api/system/agent_version?token={{ ncpa_test_token | urlencode }}"
+        validate_certs: false   # fresh installs use NCPA's self-signed 'adhoc' cert
+        return_content: true
+      register: r05
+      until: r05.status | default(0) == 200
+      retries: 10
+      delay: 3
+      no_log: true
+      ignore_errors: true
+
+    - name: "T05 | Verify API response"
+      ansible.builtin.assert:
+        that:
+          - r05_start is not failed
+          - r05.status | default(0) == 200
+        fail_msg: "service start failed={{ r05_start is failed }}, HTTP status={{ r05.status | default('n/a') }}"
+      register: t05
+      ignore_errors: true
+
+    # ------------------------------------------------------------ T06
+    - name: "T06 | Install in check mode while installed"
+      nagios.ncpa.ncpa_install:
+        state: present
+        package_source: "{{ ncpa_test_source }}"
+        version: "{{ ncpa_test_version | default(omit, true) }}"
+      check_mode: true
+      register: r06
+      ignore_errors: true
+
+    - name: "T06 | Verify"
+      ansible.builtin.assert:
+        that:
+          - r06 is not failed
+          - r06 is not changed
+        fail_msg: "{{ r06 | to_json }}"
+      register: t06
+      ignore_errors: true
+
+    # ------------------------------------------------------------ T07
+    - name: "T07 | Install again"
+      nagios.ncpa.ncpa_install:
+        state: present
+        package_source: "{{ ncpa_test_source }}"
+        version: "{{ ncpa_test_version | default(omit, true) }}"
+      register: r07
+      ignore_errors: true
+
+    - name: "T07 | Verify idempotency"
+      ansible.builtin.assert:
+        that:
+          - r07 is not failed
+          - r07 is not changed
+          - "'stderr' not in r07"
+        fail_msg: "{{ r07 | to_json }}"
+      register: t07
+      ignore_errors: true
+
+    # ------------------------------------------------------------ T08
+    - name: "T08 | Remove"
+      nagios.ncpa.ncpa_install:
+        state: absent
+      register: r08
+      ignore_errors: true
+
+    - name: "T08 | Read package state"
+      ansible.builtin.include_tasks: PkgState.yml
+
+    - name: "T08 | Verify removal"
+      ansible.builtin.assert:
+        that:
+          - r08 is not failed
+          - r08 is changed
+          - not (ncpa_pkg_installed | bool)
+        fail_msg: "installed={{ ncpa_pkg_installed }} result={{ r08 | to_json }}"
+      register: t08
+      ignore_errors: true
+
+    # ------------------------------------------------------------ T09
+    - name: "T09 | Remove again"
+      nagios.ncpa.ncpa_install:
+        state: absent
+      register: r09
+      ignore_errors: true
+
+    - name: "T09 | Verify idempotency"
+      ansible.builtin.assert:
+        that:
+          - r09 is not failed
+          - r09 is not changed
+        fail_msg: "{{ r09 | to_json }}"
+      register: t09
+      ignore_errors: true
+
+    # ------------------------------------------------------------ T10
+    - name: "T10 | Remove in check mode while absent"
+      nagios.ncpa.ncpa_install:
+        state: absent
+      check_mode: true
+      register: r10
+      ignore_errors: true
+
+    - name: "T10 | Verify"
+      ansible.builtin.assert:
+        that:
+          - r10 is not failed
+          - r10 is not changed
+        fail_msg: "{{ r10 | to_json }}"
+      register: t10
+      ignore_errors: true
+
+    # ------------------------------------------------------------ summary
+    - name: Collect results
+      ansible.builtin.set_fact:
+        ncpa_test_report: >-
+          {{ ncpa_test_report | default([]) +
+             [ ('FAIL ' if lookup('ansible.builtin.vars', item.id).failed | default(false) else 'PASS ')
+               ~ (item.id | upper) ~ '  ' ~ item.desc ] }}
+      loop: "{{ ncpa_test_cases }}"
+      loop_control:
+        label: "{{ item.id }}"
+
+    - name: Test report
+      ansible.builtin.debug:
+        msg: "{{ ncpa_test_report }}"
+
+    - name: Fail the host if any test failed
+      ansible.builtin.fail:
+        msg: "{{ ncpa_test_report | select('match', 'FAIL') | list | length }} test(s) failed on {{ inventory_hostname }}"
+      when: ncpa_test_report | select('match', 'FAIL') | list | length > 0
+
